@@ -1,0 +1,23 @@
+7. 	Ký hiệu cổng AND trong hình là:
+[img:$img_1$]                                       
+   *a. Hình a
+    b. Hình b
+    c. Hình c
+    d. Hình d
+8. 	Ký hiệu cổng XOR trong hình là: 
+[img:$img_3$]
+   *a. Hình a		b. Hình b
+    b. Hình c		d. Hình d
+9. 	 Ký hiệu cổng XNOR trong hình là: 
+[img:$img_4$]
+    a. Hình a
+   *b. Hình b
+    c. Hình c
+    d. Hình d
+10. 	 Ký hiệu cổng OR trong hình là: 
+[img:$img_5$]
+                                              
+    a. Hình a
+    b. Hình b
+   *c. Hình c
+    d. Hình d
