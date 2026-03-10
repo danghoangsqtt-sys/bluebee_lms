@@ -1,0 +1,10 @@
+
+node_modules/
+dist/
+dist-electron/
+build/
+*.log
+.env
+.env.local
+.DS_Store
+package-lock.json
