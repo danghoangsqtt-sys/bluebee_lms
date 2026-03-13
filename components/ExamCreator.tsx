@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Question, QuestionType, Exam } from '../types';
@@ -63,7 +63,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
   const [examPurpose, setExamPurpose] = useState<'online_test' | 'self_study' | 'both'>((currentExam?.exam_purpose as any) || 'both');
   const [duration, setDuration] = useState<number>(currentExam?.duration || 15);
 
-  const [questionFolders, setQuestionFolders] = useState<string[]>(['Tất cả']);
+  const [customFolders, setCustomFolders] = useState<string[]>([]);
 
   useEffect(() => {
       const loadAllFolders = async () => {
@@ -72,7 +72,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
                   fetchCustomFolders('question'),
                   fetchCustomFolders('exam')
               ]);
-              setQuestionFolders(['Tất cả', ...qFolders]);
+              setCustomFolders(qFolders);
               setExamFolders(eFolders);
           } catch (err) {
               console.error("Lỗi tải danh sách thư mục:", err);
@@ -97,7 +97,15 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
     loadMetadata();
   }, [sourceQuestionFolder]);
 
-  // Filter local metadata
+  // Tự động trích xuất thư mục từ dữ liệu metadata đã tải
+  const questionFolders = useMemo(() => {
+    // Lấy thư mục từ câu hỏi thật
+    const fromQuestions = metadataQuestions.map(q => q.folder || 'Mặc định');
+    // Gộp với danh sách thư mục tùy chỉnh
+    const combined = new Set([...fromQuestions, ...customFolders, 'Mặc định']);
+    return Array.from(combined).sort();
+  }, [metadataQuestions, customFolders]);
+
   const filteredMetadata = useMemo(() => {
     return metadataQuestions; 
   }, [metadataQuestions]);
@@ -167,7 +175,16 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
       const countRequested = matrixCounts[level];
       if (countRequested <= 0) return;
 
-      const availableInLevel = filteredMetadata.filter(q => q.bloomLevel === level);
+      const availableInLevel = filteredMetadata.filter(q => {
+        const matchFolder = sourceQuestionFolder === 'Tất cả' || 
+                           q.folder === sourceQuestionFolder || 
+                           q.folder?.$id === sourceQuestionFolder || 
+                           q.folderId === sourceQuestionFolder;
+        
+        const matchBloom = q.bloomLevel?.trim().toLowerCase() === level.trim().toLowerCase();
+        
+        return matchFolder && matchBloom;
+      });
       if (availableInLevel.length < countRequested) {
         errors.push(`Mức độ "${level}" chỉ có ${availableInLevel.length} câu trong kho (yêu cầu ${countRequested})`);
       } else {
@@ -450,8 +467,11 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
                                     onChange={e => setSourceQuestionFolder(e.target.value)}
                                     className="w-full p-4 bg-white border border-slate-300 rounded-sm font-bold text-sm outline-none focus:border-blue-900 disabled:bg-slate-100 disabled:text-slate-500"
                                 >
-                                    {questionFolders.map(folder => (
-                                        <option key={`src-folder-${folder}`} value={folder}>{folder}</option>
+                                    <option value="Tất cả">Tất cả thư mục</option>
+                                    {questionFolders.filter(f => f !== 'Tất cả').map(folder => (
+                                        <option key={`src-folder-${folder}`} value={folder}>
+                                            {folder}
+                                        </option>
                                     ))}
                                 </select>
                             </div>
@@ -498,7 +518,14 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
                     
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                          {BLOOM_LEVELS.map(level => {
-                            const available = filteredMetadata.filter(q => q.bloomLevel === level).length;
+                            const available = filteredMetadata.filter(q => {
+                                const matchFolder = sourceQuestionFolder === 'Tất cả' || 
+                                                   q.folder === sourceQuestionFolder || 
+                                                   q.folder?.$id === sourceQuestionFolder || 
+                                                   q.folderId === sourceQuestionFolder;
+                                const matchBloom = q.bloomLevel?.trim().toLowerCase() === level.trim().toLowerCase();
+                                return matchFolder && matchBloom;
+                            }).length;
                             return (
                                 <div key={level} className={`p-6 rounded-sm border transition-all ${matrixCounts[level] > 0 ? 'bg-blue-50 border-blue-900' : 'bg-slate-50 border-slate-300 opacity-60'}`}>
                                     <div className="flex justify-between items-center mb-3">

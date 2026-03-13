@@ -187,7 +187,7 @@ export const databaseService = {
         const queries = [Query.orderDesc('$createdAt')];
         
         if (options?.limit) queries.push(Query.limit(options.limit));
-        else queries.push(Query.limit(500)); // Default fallback
+        else queries.push(Query.limit(5000)); // Tăng limit mặc định lên 5000
         
         if (options?.offset) queries.push(Query.offset(options.offset));
 
@@ -256,9 +256,14 @@ export const databaseService = {
               const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, queries);
               return response.documents.map(mapDbQuestionToLocal);
           } else if (folderId) {
-              const queries = [Query.contains('metadata', `"${folderId}"`), Query.limit(500)];
+              const queries = [
+                  Query.contains('metadata', `"${folderId}"`), 
+                  Query.limit(5000) // Tăng limit để kéo toàn bộ câu hỏi
+              ];
               const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, queries);
-              return response.documents.map(mapDbQuestionToLocal).filter((q: any) => q.folder === folderId || q.folderId === folderId);
+              return response.documents.map(mapDbQuestionToLocal).filter((q: any) => 
+                  q.folder === folderId || q.folderId === folderId || q.folder?.$id === folderId
+              );
           }
           return [];
       } catch (error: any) {
@@ -704,6 +709,19 @@ async saveCourse(courseData: any, userId: string) {
     } catch (error) {
         console.error("Lỗi xóa lịch:", error);
         throw error;
+    }
+  },
+
+  async fetchFolders(moduleName: 'question' | 'exam' = 'question') {
+    try {
+        const res = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.folders, [
+            Query.equal('module', moduleName),
+            Query.limit(100)
+        ]);
+        return res.documents;
+    } catch (error) { 
+        console.error("Lỗi tải thư mục:", error); 
+        return []; 
     }
   }
 };
