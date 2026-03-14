@@ -94,6 +94,9 @@ const mapDbExamToLocal = (db: any): any => {
     questionIds: db.question_ids || [], 
     config: configObj,
     folder: configObj.folder || db.folder || 'Mặc định',
+    subject_name: configObj.subject || db.subject_name || '',
+    module_name: configObj.moduleTerm || db.module_name || '',
+    exam_type: db.type || configObj.exam_type || 'Trắc nghiệm',
     creatorId: db.creator_id,
     createdAt: db.$createdAt,
     
@@ -224,7 +227,7 @@ export const databaseService = {
   async fetchQuestionMetadataForMatrix(folder?: string): Promise<any[]> {
     try {
         const queries = [
-            Query.select(['$id', 'metadata', 'type']), 
+            Query.select(['$id', 'metadata', 'type', 'bloom_level']), 
             Query.limit(5000) // Khả năng query hàng ngàn record rỗng rất nhanh
         ];
         
@@ -239,7 +242,7 @@ export const databaseService = {
             return {
                 id: doc.$id,
                 type: doc.type,
-                bloomLevel: meta.bloomLevel || 'Nhận biết',
+                bloomLevel: meta.bloomLevel || doc.bloom_level || 'Nhận biết',
                 folder: meta.folder || meta.folderId || 'Mặc định'
             };
         });
@@ -396,6 +399,10 @@ export const databaseService = {
           if (updates.class_id !== undefined) configObj.class_id = updates.class_id;
           if (updates.exam_purpose !== undefined) configObj.exam_purpose = updates.exam_purpose;
           if (updates.max_attempts !== undefined) configObj.max_attempts = updates.max_attempts;
+          
+          // Thêm metadata môn/bài vào config JSON để đồng bộ
+          if (updates.subject_name !== undefined) configObj.subject = updates.subject_name;
+          if (updates.module_name !== undefined) configObj.moduleTerm = updates.module_name;
 
           // Xử lý đồng bộ: Nếu cập nhật trường phẳng, hãy gỡ khỏi config JSON để tránh redundancy
           if (updates.title !== undefined) delete configObj.title;
@@ -412,6 +419,11 @@ export const databaseService = {
           if (updates.title !== undefined) dbPayload.title = updates.title;
           if (updates.question_ids !== undefined) dbPayload.question_ids = updates.question_ids;
           if (updates.type !== undefined) dbPayload.type = updates.type;
+          
+          // Nếu database có cột phẳng thì cập nhật luôn (phòng trường hợp DB đã cấu hình cột)
+          if (updates.subject_name !== undefined) dbPayload.subject_name = updates.subject_name;
+          if (updates.module_name !== undefined) dbPayload.module_name = updates.module_name;
+          if (updates.duration !== undefined) dbPayload.duration = updates.duration;
 
           await databases.updateDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, id, dbPayload);
       } catch (error) {
@@ -429,7 +441,9 @@ export const databaseService = {
             status: e.status || e.config?.status || 'draft',
             class_id: e.sharedWithClassId || e.config?.class_id || null,
             max_attempts: e.config?.max_attempts || 1,
-            folder: e.folder || 'Mặc định'
+            folder: e.folder || 'Mặc định',
+            subject: e.subject_name || e.config?.subject || '',
+            moduleTerm: e.module_name || e.config?.moduleTerm || ''
         };
 
         // Rút gọn config tối đa để tránh Row Size Limit (Appwrite)
@@ -438,17 +452,19 @@ export const databaseService = {
         delete configToSave.title;
         delete configToSave.type;
         delete configToSave.exam_type;
-        delete configToSave.folder;
-        delete configToSave.subject_name;
-        delete configToSave.module_name;
 
-        const payload = {
+        const payload: any = {
             title: e.title,
             type: e.type || e.exam_type || 'REGULAR',
             question_ids: e.questionIds || [],
             config: JSON.stringify(configToSave), 
-            creator_id: userId
+            creator_id: userId,
+            duration: e.duration || null
         };
+        
+        if (e.subject_name) payload.subject_name = e.subject_name;
+        if (e.module_name) payload.module_name = e.module_name;
+
         const created = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, ID.unique(), payload);
         return mapDbExamToLocal(created);
     } catch (error) {
@@ -722,6 +738,76 @@ async saveCourse(courseData: any, userId: string) {
     } catch (error) { 
         console.error("Lỗi tải thư mục:", error); 
         return []; 
+    }
+  },
+
+  async repairBloomLevels() {
+    console.log("Starting Bloom Level Repair...");
+    let offset = 0;
+    const limit = 100;
+    let fixedCount = 0;
+
+    const mapEnglishToVietnamese = (level: string): string | null => {
+        if (!level) return null;
+        const l = level.trim().toLowerCase().normalize('NFC');
+        if (l.includes('remember') || l.includes('knowledge')) return 'Nhận biết';
+        if (l.includes('understand') || l.includes('comprehension')) return 'Thông hiểu';
+        if (l.includes('apply') || l.includes('application')) return 'Vận dụng';
+        if (l.includes('analy')) return 'Phân tích';
+        if (l.includes('evaluat')) return 'Đánh giá';
+        if (l.includes('creat') || l.includes('synthesis')) return 'Sáng tạo';
+        return null;
+    };
+
+    try {
+        while (true) {
+            const response = await databases.listDocuments(
+                APPWRITE_CONFIG.dbId, 
+                APPWRITE_CONFIG.collections.questions, 
+                [Query.limit(limit), Query.offset(offset)]
+            );
+
+            if (response.documents.length === 0) break;
+
+            for (const doc of response.documents) {
+                let meta: any = {};
+                try { meta = JSON.parse(doc.metadata || '{}'); } catch(e) {}
+                
+                const oldFlat = doc.bloom_level;
+                const oldMeta = meta.bloomLevel;
+                
+                const newFlat = mapEnglishToVietnamese(oldFlat);
+                const newMeta = mapEnglishToVietnamese(oldMeta);
+
+                if (newFlat || newMeta) {
+                    const updates: any = {};
+                    if (newFlat) updates.bloom_level = newFlat;
+                    if (newMeta) {
+                        meta.bloomLevel = newMeta;
+                        updates.metadata = JSON.stringify(meta);
+                    } else if (newFlat && !meta.bloomLevel) {
+                         // Đồng bộ meta nếu flat đổi mà meta rỗng
+                         meta.bloomLevel = newFlat;
+                         updates.metadata = JSON.stringify(meta);
+                    }
+
+                    await databases.updateDocument(
+                        APPWRITE_CONFIG.dbId, 
+                        APPWRITE_CONFIG.collections.questions, 
+                        doc.$id, 
+                        updates
+                    );
+                    fixedCount++;
+                }
+            }
+
+            offset += limit;
+            if (offset >= response.total) break;
+        }
+        return fixedCount;
+    } catch (error) {
+        console.error("Repair Bloom Error:", error);
+        throw error;
     }
   }
 };

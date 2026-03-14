@@ -35,6 +35,21 @@ interface ExamCreatorProps {
 
 const BLOOM_LEVELS = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
 
+const normalizeBloomLevel = (level: string): string => {
+    if (!level) return 'Nhận biết';
+    const l = level.trim().toLowerCase().normalize('NFC');
+    
+    // Mapping English to Vietnamese
+    if (l.includes('remember') || l.includes('knowledge') || l === 'nhận biết') return 'Nhận biết';
+    if (l.includes('understand') || l.includes('comprehension') || l === 'thông hiểu') return 'Thông hiểu';
+    if (l.includes('apply') || l.includes('application') || l === 'vận dụng') return 'Vận dụng';
+    if (l.includes('analy') || l.includes('phân tích')) return 'Phân tích';
+    if (l.includes('evaluat') || l.includes('đánh giá')) return 'Đánh giá';
+    if (l.includes('creat') || l.includes('synthesis') || l === 'sáng tạo') return 'Sáng tạo';
+    
+    return level; // Fallback
+};
+
 const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, onSaveExam, readOnly = false }) => {
   const currentExam = useMemo(() => editExam || viewExam, [editExam, viewExam]);
   const isEditMode = !!editExam;
@@ -46,6 +61,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [isMatrixLoading, setIsMatrixLoading] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
   // Metadata nhẹ chỉ chứa ID và mức độ Bloom
   const [metadataQuestions, setMetadataQuestions] = useState<any[]>([]);
   // Dữ liệu đầy đủ cho Preview
@@ -181,7 +197,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
                            q.folder?.$id === sourceQuestionFolder || 
                            q.folderId === sourceQuestionFolder;
         
-        const matchBloom = q.bloomLevel?.trim().toLowerCase() === level.trim().toLowerCase();
+        const matchBloom = normalizeBloomLevel(q.bloomLevel) === normalizeBloomLevel(level);
         
         return matchFolder && matchBloom;
       });
@@ -268,8 +284,8 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
       module_name: moduleName.trim(),
       config: {
           ...examConfig,
-          subject: subjectName, 
-          moduleTerm: moduleName,
+          subject: subjectName.trim(), 
+          moduleTerm: moduleName.trim(),
           exam_purpose: examPurpose,
           class_id: examConfig.assignedClassId || null,
           max_attempts: isEditMode ? (currentExam?.config?.max_attempts || 1) : 1
@@ -307,6 +323,23 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
       }
     } catch (err: any) {
         alert("Lỗi khi lưu đề thi: " + err.message);
+    }
+  };
+
+  const handleRepairLabels = async () => {
+    if (!window.confirm("Hệ thống sẽ quét toàn bộ câu hỏi và tự động chuyển các nhãn tiếng Anh (Applying, Remembering...) sang tiếng Việt. Bạn có muốn tiếp tục?")) return;
+    
+    setIsRepairing(true);
+    try {
+        const count = await databaseService.repairBloomLevels();
+        alert(`Đã sửa thành công ${count} câu hỏi! Hệ thống sẽ tải lại dữ liệu.`);
+        // Reload metadata to reflect changes
+        const data = await databaseService.fetchQuestionMetadataForMatrix(sourceQuestionFolder);
+        setMetadataQuestions(data);
+    } catch (err: any) {
+        alert("Lỗi khi sửa nhãn: " + err.message);
+    } finally {
+        setIsRepairing(false);
     }
   };
 
@@ -474,6 +507,14 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
                                         </option>
                                     ))}
                                 </select>
+                                <button 
+                                    onClick={handleRepairLabels}
+                                    disabled={isRepairing}
+                                    className="mt-2 text-[9px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-all flex items-center gap-1"
+                                    title="Sửa lỗi nhãn AI bằng tiếng Anh (Applying, Remembering...)"
+                                >
+                                    {isRepairing ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-magic"></i>} Sửa lỗi nhãn AI (English tags)
+                                </button>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -522,8 +563,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
                                 const matchFolder = sourceQuestionFolder === 'Tất cả' || 
                                                    q.folder === sourceQuestionFolder || 
                                                    q.folder?.$id === sourceQuestionFolder || 
-                                                   q.folderId === sourceQuestionFolder;
-                                const matchBloom = q.bloomLevel?.trim().toLowerCase() === level.trim().toLowerCase();
+                                                   q.description?.includes(sourceQuestionFolder) ||
+                                q.folderId === sourceQuestionFolder;
+                                const matchBloom = normalizeBloomLevel(q.bloomLevel) === normalizeBloomLevel(level);
                                 return matchFolder && matchBloom;
                             }).length;
                             return (
