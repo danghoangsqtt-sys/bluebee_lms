@@ -27,9 +27,11 @@ const MarqueeBanner: React.FC<MarqueeBannerProps> = ({ onNotify, allowEdit = fal
             } else {
                 setMarqueeText('CHÀO MỪNG QUÝ ĐỒNG CHÍ ĐẾN VỚI HỆ THỐNG HỌC TẬP - HIỆU QUẢ, LINH HOẠT, BẢO MẬT.');
             }
-        } catch (error) {
-            console.error('Error fetching notification:', error);
-            setMarqueeText('LỖI KẾT NỐI HỆ THỐNG THÔNG BÁO.');
+        } catch (error: any) {
+            if (error?.code !== 404) {
+                console.warn('Lỗi lấy thông báo chạy:', error?.message);
+            }
+            setMarqueeText('CHÀO MỪNG QUÝ ĐỒNG CHÍ ĐẾN VỚI HỆ THỐNG HỌC TẬP - HIỆU QUẢ, LINH HOẠT, BẢO MẬT.');
         }
     };
 

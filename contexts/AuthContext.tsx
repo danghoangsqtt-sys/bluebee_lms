@@ -105,12 +105,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const oldProfile = existingProfiles.documents[0];
         finalRole = oldProfile.role;
         finalClassId = oldProfile.class_id;
-        // Xóa hồ sơ chờ (rác) vì ta sẽ tạo hồ sơ chính thức gắn với ID của Auth User
-        await databases.deleteDocument(
-          APPWRITE_CONFIG.dbId,
-          APPWRITE_CONFIG.collections.profiles,
-          oldProfile.$id
-        );
+        // Fix H-08: Xóa hồ sơ chờ với xử lý race condition
+        // Nếu 2 user đăng ký cùng email cùng lúc, chỉ 1 người xóa được, người còn lại nhận 404 - không được throw lỗi
+        try {
+          await databases.deleteDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.profiles,
+            oldProfile.$id
+          );
+        } catch (deleteErr: any) {
+          if (deleteErr?.code === 404) {
+            // Profile đã bị xóa bởi profile khác (race condition), tiếp tục bình thường
+            console.warn('[Auth] Profile chờ đã bị xóa bởi session khác (race condition xử lý OK).');
+          } else {
+            console.error('[Auth] Lỗi xóa profile chờ:', deleteErr);
+          }
+        }
       }
     } catch (e) {
       console.warn("Lỗi kiểm tra hồ sơ chờ:", e);

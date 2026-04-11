@@ -32,7 +32,10 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
     const answersRef = useRef<Record<string, string>>({});
     const flagsRef = useRef<Set<string>>(new Set());
     const cheatCountRef = useRef<number>(0);
-    const antiCheatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Fix C-04: Dùng ref cho viewMode để tránh stale closure trong timer
+    const viewModeRef = useRef<'TESTING' | 'REVIEW' | 'RESULT'>('TESTING');
+    // Fix L-03: Dùng ReturnType<typeof setTimeout> thay vì NodeJS.Timeout
+    const antiCheatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Sync refs with state
     useEffect(() => { answersRef.current = answers; }, [answers]);
@@ -45,6 +48,9 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
     const [finalScore, setFinalScore] = useState<number | null>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [correctCount, setCorrectCount] = useState<number>(0);
+
+    // Fix C-04: Cập nhật viewModeRef mỗi khi viewMode thay đổi
+    useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
     const showToast = (msg: string) => {
         setToastMessage(msg);
@@ -104,7 +110,7 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
         initRoom();
     }, [exam, user]);
 
-    // Đồng hồ đếm ngược được tách ra khỏi cycle Auto-save
+    // Fix C-04: Timer effect dùng ref thay vì closure để tránh stale viewMode
     useEffect(() => {
         if (!isTimeInitialized || !timerEndTimeRef.current) return;
         
@@ -114,11 +120,14 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
             setTimeLeft(remaining);
             if (remaining <= 0) {
                 clearInterval(timerCounter);
-                handleAutoSubmit();
+                // Fix C-04: Dùng ref để đọc viewMode mới nhất, tránh stale closure
+                if (viewModeRef.current !== 'RESULT') {
+                    handleAutoSubmit();
+                }
             }
         }, 1000);
         return () => clearInterval(timerCounter);
-    }, [isTimeInitialized, viewMode]); // viewMode triggers auto submit
+    }, [isTimeInitialized]); // Fix C-04: Bỏ viewMode khỏi dependency, dùng ref thay thế
 
     // Update Auto-save độc lập, sử dụng debounce timeout riêng
     useEffect(() => {
@@ -145,7 +154,8 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
         return () => clearTimeout(saveAnswers);
     }, [answers, flags, cheatCount, timeLeft, attemptId, isTimeInitialized]);
 
-    // Offline & Unload Handlers & Anti-Cheat
+    // Fix C-05: Tách anti-cheat effect họan toàn khỏi timeLeft,
+    // và fix double-counting (blur + visibilitychange cùng xảy ra)
     useEffect(() => {
         if (!attemptId || viewMode !== 'TESTING') return;
 
@@ -156,7 +166,7 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
         const handleOnline = () => {
              showToast("Trạng thái: Online - Đang đồng bộ dữ liệu...");
              const localData = localStorage.getItem(`bluebee_exam_${exam.id}_${user.id}`);
-             let syncAnswers = answers;
+             let syncAnswers = answersRef.current;
              if (localData) {
                  try {
                      const parsed = JSON.parse(localData);
@@ -169,29 +179,35 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
              }).catch(e => {});
         };
 
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        const handleBeforeUnload = () => {
             if (navigator.onLine) {
-                 updateExamResult(attemptId, { status: 'disconnected', remainingTime: timeLeft }).catch(e => {});
+                 updateExamResult(attemptId, { status: 'disconnected', remainingTime: timerEndTimeRef.current 
+                    ? Math.max(0, Math.floor((timerEndTimeRef.current - Date.now()) / 1000))
+                    : 0 
+                 }).catch(e => {});
             }
         };
 
         const debouncedCheatUpdate = (newTotalRedFlags: number) => {
-            if (!navigator.onLine) return; // Khoá gửi API nếu rớt mạng
+            if (!navigator.onLine) return;
             if (antiCheatTimeoutRef.current) clearTimeout(antiCheatTimeoutRef.current);
             antiCheatTimeoutRef.current = setTimeout(() => {
                 updateExamResult(attemptId, { 
                     status: 'warning_tab_switch', 
                     redFlags: newTotalRedFlags
-                }).catch(e => { console.error(e); showToast("Lỗi rớt mạng. Đang thử lại..."); });
-            }, 5000); // Batch các red-flag increments, fire at most once every 5 seconds
+                }).catch(e => { console.error(e); });
+            }, 5000);
         };
 
+        // Fix C-05: Chỉ dùng visibilitychange, bỏ blur để tránh double-counting
+        // (blur thường fire trước visibilitychange khi alt-tab)
         const handleVisibilityChange = () => {
-             if (exam.exam_purpose === 'self_study' || exam.exam_purpose === 'both') return;
+             if (exam.exam_purpose === 'self_study') return;
              if (document.hidden) {
                   setCheatCount(prev => {
                       const newCount = prev + 1;
-                      debouncedCheatUpdate(flags.size + newCount);
+                      cheatCountRef.current = newCount;
+                      debouncedCheatUpdate(flagsRef.current.size + newCount);
                       return newCount;
                   });
              } else {
@@ -199,17 +215,9 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
              }
         };
 
-        const handleBlur = () => {
-             if (exam.exam_purpose === 'self_study' || exam.exam_purpose === 'both') return;
-             setCheatCount(prev => {
-                  const newCount = prev + 1;
-                  debouncedCheatUpdate(flags.size + newCount);
-                  return newCount;
-             });
-        };
-        
+        // Fix C-05: handleFocus khi user bấm vào lại cửa sổ, không cần đếm vi phạm
         const handleFocus = () => {
-             if (exam.exam_purpose === 'self_study' || exam.exam_purpose === 'both') return;
+             if (exam.exam_purpose === 'self_study') return;
              if (navigator.onLine) updateExamResult(attemptId, { status: 'in_progress' }).catch(e => {});
         };
 
@@ -217,7 +225,7 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
         window.addEventListener('online', handleOnline);
         window.addEventListener('beforeunload', handleBeforeUnload);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('blur', handleBlur);
+        // Fix C-05: Không có blur listener nữa (tránh double-counting với visibilitychange)
         window.addEventListener('focus', handleFocus);
 
         return () => {
@@ -225,11 +233,11 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('beforeunload', handleBeforeUnload);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('blur', handleBlur);
             window.removeEventListener('focus', handleFocus);
             if (antiCheatTimeoutRef.current) clearTimeout(antiCheatTimeoutRef.current);
         };
-    }, [attemptId, timeLeft, exam, user]); // Clean dependencies
+    // Fix C-05: Loại timeLeft khỏi dependencies - dùng ref thay thế để tránh re-register mỗi giây
+    }, [attemptId, viewMode, exam, user]);
 
     const formatTime = (seconds: number) => {
         const m = Math.floor(seconds / 60);

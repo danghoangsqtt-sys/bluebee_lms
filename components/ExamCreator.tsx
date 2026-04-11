@@ -165,7 +165,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
     });
 
   const [currentQuestionIds, setCurrentQuestionIds] = useState<string[]>(currentExam?.questionIds || []);
-  const [answerData, setAnswerData] = useState<Record<number, AnswerEntry>>({});
+  // Fix M-04: Dùng Record<string, AnswerEntry> thay vì Record<number, AnswerEntry>
+  // question.id là string, nên key phải là string để truy xuất đúng
+  const [answerData, setAnswerData] = useState<Record<string, AnswerEntry>>({});
   const [previewTab, setPreviewTab] = useState<'EXAM' | 'ANSWERS'>('EXAM');
 
   // Load full data for existing exam
@@ -267,7 +269,9 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
 
       // 4. Convert answerData to simple answerKey for PDF service
       const answerKeyForPdf: Record<number, string> = {};
-      Object.entries(printData).forEach(([k, v]) => { answerKeyForPdf[Number(k)] = v.correctLetter; });
+      examQuestions.forEach((q, idx) => { 
+          if (q.id) answerKeyForPdf[idx + 1] = printData[q.id]?.correctLetter || 'N/A'; 
+      });
 
       // 5. Call Service
       exportExamToPdf(info, cleanQuestionsForPdf, answerKeyForPdf, examConfig.examCode);
@@ -703,7 +707,7 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
                               <p className="text-sm text-slate-700 mb-2"><span className="font-bold">Nội dung:</span> {formatContent(typeof q.content === 'string' ? q.content : (q.content as any).content)}</p>
                               <div className="bg-slate-50 p-3 border border-slate-200 text-sm text-slate-600 italic rounded-sm">
                                   <span className="font-bold text-blue-900 not-italic mr-1"><i className="fas fa-lightbulb"></i> Giải thích:</span> 
-                                  {data.explanation}
+                                  {formatContent(data.explanation)}
                               </div>
                           </div>
                        );

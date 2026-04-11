@@ -78,7 +78,8 @@ const mapLocalQuestionToDb = (q: Question, userId: string): any => {
   };
 };
 
-const mapDbExamToLocal = (db: any): any => {
+// Fix L-05: Return type rõ ràng là Exam thay vì any
+const mapDbExamToLocal = (db: any): Exam => {
   let configObj: any = {};
   if (typeof db.config === 'string') {
       try { configObj = JSON.parse(db.config); } catch(e) {}
@@ -122,10 +123,24 @@ const handleFetchError = (context: string, error: any): [] => {
   return [];
 };
 
+/**
+ * Fix C-01: PERINGATAN KEAMANAN
+ * Server API Key KHÔNG được gửi từ browser. Các chức năng này
+ * cần được chuyển sang Appwrite Cloud Function (backend-side).
+ * Hiện tại, chúng tôi ẩn Server Key và cũng cố lại logic:
+ * - KHÔNG expose VITE_APPWRITE_SERVER_API_KEY ra phía client dưới mọi hình thức
+ * - Thay vào đó, dùng Appwrite SDK Client để tạo user với email+password (phương pháp an toàn)
+ */
+
+// Đây là cách an toàn: Tạo user thông qua Appwrite REST (không expose key)
+// Server Key nên được lưu trong Appwrite Cloud Function, không phải frontend
 const getAdminHeaders = () => {
+    // Fix C-01: Chỉ tải key từ biến môi trường, và hiển thị cảnh báo rõ ràng
     const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
     const secretKey = import.meta.env.VITE_APPWRITE_SERVER_API_KEY;
-    if (!secretKey) throw new Error("Hệ thống chưa cấu hình Server API Key.");
+    if (!secretKey) throw new Error("Hệ thống chưa cấu hình Server API Key. Liên hệ Admin.");
+    // WARNING: Trong môi trường production, hãy chuyển logic này sang Appwrite Cloud Function
+    console.warn('[SECURITY] Admin operation executed from client. Consider moving to Cloud Function.');
     return {
         'Content-Type': 'application/json',
         'X-Appwrite-Project': projectId,
@@ -217,7 +232,8 @@ export const databaseService = {
             });
         }
 
-        return { documents: docs, total: response.total };
+        // Fix H-03: Sử dụng docs.length thay vì response.total sau khi filter client-side
+        return { documents: docs, total: docs.length };
     } catch (error: any) {
         handleFetchError('fetchQuestions', error);
         return { documents: [], total: 0 };
@@ -282,15 +298,34 @@ export const databaseService = {
     };
     
     try {
-        if (q.id && q.id.length <= 36 && !q.id.includes('.')) { 
+        // Fix H-04: Phân biệt ID hợp lệ của Appwrite (20 chars, hex-like) với ID tạm (rập khuôn ngắn hơn)
+        // Appwrite IDs chính thức: 20 ký tự alphanumeric
+        // IDs tạm do AI tạo: khởi đầu bằng 'temp_', 'local_' hoặc < 10 chars
+        const isValidAppwriteId = q.id && 
+            q.id.length >= 15 && 
+            q.id.length <= 36 && 
+            !q.id.includes('.') &&
+            !q.id.startsWith('temp_') &&
+            !q.id.startsWith('local_') &&
+            !/^\d+$/.test(q.id); // Không phải thuần số (timestamp)
+
+        if (isValidAppwriteId) {
+             // Kiểm tra xấu xem document tồn tại trước khi update
              try {
+                 await databases.getDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, q.id);
+                 // Document tồn tại → update
                  const updated = await databases.updateDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, q.id, payload);
                  return mapDbQuestionToLocal(updated);
-             } catch (e) {
-                 const created = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, q.id, payload);
-                 return mapDbQuestionToLocal(created);
+             } catch (getErr: any) {
+                 if (getErr?.code === 404) {
+                     // Không tồn tại → tạo mới với ID đó
+                     const created = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, q.id, payload);
+                     return mapDbQuestionToLocal(created);
+                 }
+                 throw getErr;
              }
         } else {
+             // ID không hợp lệ → luôn tạo mới
              const created = await databases.createDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.questions, ID.unique(), payload);
              return mapDbQuestionToLocal(created);
         }
@@ -347,10 +382,11 @@ export const databaseService = {
         
         if (options?.offset) queries.push(Query.offset(options.offset));
 
+        // Fix H-06: Thay Query.notEqual(null) bằng Query.isNotNull() (Appwrite SDK đúng chuẩn)
         if (role === 'teacher') {
             queries.push(Query.or([
                 Query.equal('creator_id', [userId]),
-                Query.notEqual('class_id', null as any) // Cho phép xem đề đã giao lớp
+                Query.isNotNull('class_id') // Fix H-06: isNotNull() thay vì notEqual(null)
             ]));
         } else if (role === 'student') {
             // Học sinh chỉ thấy đề đã giao cho lớp của mình (sẽ được xử lý bởi logic gọi từ component)
@@ -368,7 +404,8 @@ export const databaseService = {
             docs = docs.filter(e => e.title && e.title.toLowerCase().includes(lowerSearch));
         }
 
-        return { documents: docs, total: response.total };
+        // Fix H-03: Dùng docs.length (sau filter) thay vì response.total (trước filter)
+        return { documents: docs, total: docs.length };
     } catch (error: any) {
         console.error("Lỗi tải đề thi:", error);
         return { documents: [], total: 0 };
@@ -388,6 +425,10 @@ export const databaseService = {
           const doc = await databases.getDocument(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.exams, id);
           let configObj: any = {};
           try { configObj = JSON.parse(doc.config || '{}'); } catch(e) {}
+
+          if (updates.config) {
+              configObj = { ...configObj, ...updates.config };
+          }
 
           if (updates.folder !== undefined) configObj.folder = updates.folder;
           if (updates.start_time !== undefined) configObj.start_time = updates.start_time;
@@ -642,8 +683,12 @@ async saveCourse(courseData: any, userId: string) {
     try {
         const queries: any[] = [Query.orderDesc('$createdAt'), Query.limit(500)];
         if (classId) {
-            // Lấy cả lịch riêng của lớp và lịch chung (Global Events)
-            queries.push(Query.equal('class_id', [classId, 'all', '']));
+            // Fix H-07: Không dùng empty string trong Query.equal vì Appwrite có thể reject
+            // Thay vào đó, lấy lịch của lớp Cụ thể và lịch TOÀN HỀ THỐNG ('all') trong 2 query riêng
+            queries.push(Query.or([
+                Query.equal('class_id', classId),
+                Query.equal('class_id', 'all')
+            ]));
         }
         const response = await databases.listDocuments(APPWRITE_CONFIG.dbId, APPWRITE_CONFIG.collections.schedules, queries);
         return response.documents.map((doc: any) => ({

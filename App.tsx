@@ -132,8 +132,9 @@ const Dashboard = ({ questionsCount, examsCount }: any) => {
   const foldersCount = JSON.parse(
     localStorage.getItem("question_folders") || "[]",
   ).length;
+  // Fix M-09: Dùng đúng key 'knowledge_base' thay vì 'elearning_docs' (key không tồn tại)
   const docsCount = JSON.parse(
-    localStorage.getItem("elearning_docs") || "[]",
+    localStorage.getItem("knowledge_base") || "[]",
   ).length;
 
   return (
@@ -376,7 +377,25 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!isDataLoaded) return;
     localStorage.setItem("question_folders", JSON.stringify(folders));
-    localStorage.setItem("knowledge_base", JSON.stringify(knowledgeBase));
+    // Fix H-05: Thêm try-catch cho QuotaExceededError khi lưu knowledge base lớn
+    try {
+      // Chỉ lưu metadata (name, id), không lưu full text vào localStorage
+      const kbMeta = knowledgeBase.map(doc => ({ id: doc.id, name: doc.name, size: doc.text?.length || 0 }));
+      localStorage.setItem("knowledge_base_meta", JSON.stringify(kbMeta));
+      
+      // Mỗi document lưu riêng biệt và xử lý lỗi quota từng cái
+      knowledgeBase.forEach(doc => {
+        try {
+          // Cắt ngắn text trước khi lưu để tránh vượt quota
+          const truncatedDoc = { ...doc, text: doc.text?.substring(0, 50000) || '' };
+          localStorage.setItem(`knowledge_base_${doc.id}`, JSON.stringify(truncatedDoc));
+        } catch (itemErr) {
+          console.warn(`[KB Storage] Không thể lưu document "${doc.name}" vào localStorage (vượt quota):`, itemErr);
+        }
+      });
+    } catch (err) {
+      console.warn('[KB Storage] QuotaExceededError - knowledge base quá lớn để lưu localStorage:', err);
+    }
   }, [questions, exams, folders, knowledgeBase, isDataLoaded]);
 
   const showNotify = (

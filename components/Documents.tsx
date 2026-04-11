@@ -100,6 +100,19 @@ const PdfViewer: React.FC<{ url: string; isFullScreen: boolean; onToggleFullScre
         };
     }, [pdf, pageNum, scale]);
 
+    // Fix M-05: Thêm keyboard navigation cho PDF viewer
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                setPageNum(prev => Math.max(1, prev - 1));
+            } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                setPageNum(prev => Math.min(total, prev + 1));
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [total]);
+
     return (
         <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden relative group">
             {/* PDF Toolbar — Command Center style */}
@@ -312,7 +325,8 @@ const Documents: React.FC<DocumentsProps> = ({ onUpdateKnowledgeBase, onDeleteDo
 
   // TASK 3: Delete File Logic
   const deleteDoc = async (doc: CloudDocumentFile) => {
-      if (doc.id.startsWith('cloud_')) return;
+      // Fix L-04: Kiểm tra xem tài liệu có ID hợp lệ không (không phải temp/cloud)
+      if (!doc.id || doc.id.startsWith('temp_')) return;
       if (!window.confirm(`Xóa tài liệu "${doc.name}"?`)) return;
 
       try {

@@ -3,8 +3,12 @@ import { Question, QuestionType, KnowledgeDocument, AppSettings, UserProfile } f
 
 // --- CONFIGURATION ---
 const PRIMARY_MODEL = "gemini-2.5-flash"; 
-const FALLBACK_MODEL = "gemini-flash-latest"; 
+const FALLBACK_MODEL = "gemini-2.0-flash"; // Fix M-01: Model fallback thực sự
 const STORAGE_KEY_API = 'DTS_GEMINI_API_KEY';
+
+// Fix M-03: Giới hạn context hợp lý (≈ 800K tokens, tránh out-of-memory)
+const MAX_CONTEXT_CHARS = 600000; // ~150K tokens, để lại room cho prompt + output
+const MAX_HISTORY_LENGTH = 20;    // Giới hạn history để tránh context overflow
 
 const DEFAULT_SETTINGS: AppSettings = {
   modelName: PRIMARY_MODEL, 
@@ -23,16 +27,16 @@ const getSettings = (): AppSettings => {
 };
 
 /**
- * Retrieves the API Key with priority:
- * 1. User Custom Key (LocalStorage)
- * 2. System Environment Variable
+ * Fix C-02: Thay process.env.API_KEY bằng import.meta.env.VITE_GEMINI_API_KEY
+ * Priority: 1. User Custom Key → 2. VITE env var
  */
 export const getDynamicApiKey = (): string | undefined => {
   const customKey = localStorage.getItem(STORAGE_KEY_API);
   if (customKey && customKey.trim().length > 0) {
     return customKey;
   }
-  return process.env.API_KEY;
+  // Fix C-02: Vite dùng import.meta.env, không phải process.env
+  return import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
 };
 
 const getAI = (specificKey?: string) => {
@@ -63,49 +67,61 @@ export const validateApiKey = async (key: string): Promise<boolean> => {
 };
 
 /**
- * SMART WRAPPER: Handles 429/503 errors by falling back to a stable model.
+ * Fix M-01: SMART WRAPPER với fallback model thực sự.
+ * Thứ tự: PRIMARY_MODEL → FALLBACK_MODEL → throw error
  */
 const generateWithFallback = async (
   ai: GoogleGenAI, 
   params: any, 
   retryCount = 4
 ): Promise<{ response: GenerateContentResponse, usedModel: string }> => {
-  let currentModel = params.model;
+  const modelsToTry = [params.model || PRIMARY_MODEL, FALLBACK_MODEL];
   
-  if (!currentModel) currentModel = PRIMARY_MODEL;
+  for (const modelToUse of modelsToTry) {
+    let attempt = 0;
+    const currentConfig = params.config ? { ...params.config } : {};
 
-  let attempt = 0;
-  let currentConfig = params.config ? { ...params.config } : {};
+    while (attempt < retryCount) {
+      try {
+        const response = await ai.models.generateContent({
+          ...params,
+          model: modelToUse,
+          config: currentConfig
+        });
+        
+        if (modelToUse !== (params.model || PRIMARY_MODEL)) {
+          console.info(`[AI Fallback] Đang dùng model dự phòng: ${modelToUse}`);
+        }
+        return { response, usedModel: modelToUse };
 
-  while (attempt < retryCount) {
-    try {
-      const response = await ai.models.generateContent({
-        ...params,
-        model: currentModel,
-        config: currentConfig
-      });
-      
-      return { response, usedModel: currentModel };
+      } catch (error: any) {
+        const msg = error?.toString() || '';
+        const status = error?.status || 0;
+        const isQuotaError = msg.includes('429') || status === 429 || msg.includes('RESOURCE_EXHAUSTED');
+        const isServerOverload = msg.includes('503') || status === 503 || msg.includes('Overloaded');
+        const isModelError = msg.includes('model') && (msg.includes('not found') || status === 404);
 
-    } catch (error: any) {
-      const msg = error.toString();
-      const status = error.status || 0;
-      const isQuotaError = msg.includes('429') || status === 429 || msg.includes('RESOURCE_EXHAUSTED');
-      const isServerOverload = msg.includes('503') || status === 503 || msg.includes('Overloaded');
+        if (isModelError || isServerOverload) {
+          // Model không tồn tại hoặc Server 503 Overloaded → thử model tiếp theo ngay để giảm lag
+          console.warn(`[AI Fallback] Model ${modelToUse} không khả dụng/Overloaded, thử model dự phòng...`);
+          break;
+        }
 
-      if (isQuotaError || isServerOverload) {
-        attempt++;
-        if (attempt >= retryCount) break; 
+        if (isQuotaError) {
+          attempt++;
+          if (attempt >= retryCount) break; // Hết retry → thử model tiếp theo
 
-        const delay = 1000 * Math.pow(2, attempt);
-        await new Promise(r => setTimeout(r, delay));
-        continue;
+          const delay = 500 * Math.pow(2, attempt); // Giảm mạnh thời gian chờ
+          console.warn(`[AI Retry] ${attempt}/${retryCount} - Chờ ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        throw error; // Lỗi khác (auth, format...) → throw ngay
       }
-      throw error;
     }
   }
   
-  throw new Error("Lỗi kết nối AI. Vui lòng kiểm tra dung lượng file (tối đa 1000 trang) hoặc kiểm tra API Key.");
+  throw new Error("Lỗi kết nối AI. Vui lòng kiểm tra API Key và thử lại sau.");
 };
 
 const getSystemInstruction = (settings: AppSettings, contextText: string, user?: UserProfile | null) => {
@@ -144,11 +160,16 @@ const getSystemInstruction = (settings: AppSettings, contextText: string, user?:
   `;
 
   if (contextText) {
+    // Fix M-03: Cắt context đúng giới hạn an toàn
+    const truncatedContext = contextText.length > MAX_CONTEXT_CHARS 
+      ? contextText.substring(0, MAX_CONTEXT_CHARS) + "\n\n[...NỘI DUNG ĐÃ BỊ CẮT DO QUÁ DÀI...]"
+      : contextText;
+
     instruction += `\n\n[QUY TẮC CỨNG]:
 1. TUYỆT ĐỐI chỉ dùng thông tin trong tài liệu này để thực hiện yêu cầu. Không bịa đặt.
 2. Nếu tài liệu không chứa đủ dữ liệu, hãy trả lời: "Tài liệu không đủ thông tin".
 
-[NỘI DUNG TÀI LIỆU]:\n${contextText.substring(0, 800000)}`;
+[NỘI DUNG TÀI LIỆU]:\n${truncatedContext}`;
   }
   
   return instruction;
@@ -175,13 +196,16 @@ export const generateChatResponse = async (
         sources = knowledgeDocs.map(doc => ({ uri: '#', title: doc.name }));
     }
 
-    const targetModel = PRIMARY_MODEL;
+    // Fix C-03: Giới hạn history để tránh context overflow
+    const trimmedHistory = history.slice(-MAX_HISTORY_LENGTH);
+
+    const targetModel = config?.model || PRIMARY_MODEL;
     const tools = [{ googleSearch: {} }];
 
     const { response, usedModel } = await generateWithFallback(ai, {
       model: targetModel,
       contents: [
-        ...history,
+        ...trimmedHistory,
         { role: 'user', parts: [{ text: message }] }
       ],
       config: {
@@ -200,7 +224,7 @@ export const generateChatResponse = async (
 
     const allSources = [...sources, ...searchSources].filter((v,i,a)=>a.findIndex(t=>(t.uri === v.uri))===i);
 
-    let finalText = response.text || "AI không thể tạo phản hồi.";
+    const finalText = response.text || "AI không thể tạo phản hồi.";
     
     return {
       text: finalText,
@@ -209,7 +233,7 @@ export const generateChatResponse = async (
     };
   } catch (error: any) {
     console.error("AI Core Error:", error);
-    throw new Error("Lỗi kết nối AI. Vui lòng kiểm tra dung lượng file (tối đa 1000 trang) hoặc kiểm tra API Key.");
+    throw new Error(error.message || "Lỗi kết nối AI. Vui lòng kiểm tra API Key.");
   }
 };
 
@@ -224,14 +248,19 @@ export const generateQuestionsByAI = async (
     
     let finalPrompt = promptText;
     if (contextText) {
+      // Fix M-03: Giới hạn context an toàn
+      const truncatedContext = contextText.length > MAX_CONTEXT_CHARS
+        ? contextText.substring(0, MAX_CONTEXT_CHARS) + "\n\n[...NỘI DUNG ĐÃ BỊ CẮT DO QUÁ DÀI...]"
+        : contextText;
+
       finalPrompt = `
-Bạn là một chuyên gia. Tôi cung cấp cho bạn một tài liệu đầy đủ dưới đây.
+Bạn là một chuyên gia sư phạm. Tôi cung cấp cho bạn một tài liệu đầy đủ dưới đây.
 [QUY TẮC CỨNG]:
 1. TUYỆT ĐỐI chỉ dùng thông tin trong tài liệu này để thực hiện yêu cầu. Không bịa đặt.
-2. Nếu tài liệu không chứa đủ dữ liệu, hãy trả lời: "Tài liệu không đủ thông tin".
+2. Nếu tài liệu không chứa đủ dữ liệu, hãy trả lời theo JSON rỗng [].
 
 [NỘI DUNG TÀI LIỆU]:
-${contextText.substring(0, 800000)}
+${truncatedContext}
 
 [YÊU CẦU CỦA NGƯỜI DÙNG]:
 ${promptText}
@@ -265,9 +294,7 @@ ${promptText}
       },
     });
     
-    // DEBUG: Log raw response
     const rawText = response.text || "";
-    console.log("Raw response from Gemini:", rawText);
 
     if (!rawText) return [];
 
@@ -275,17 +302,21 @@ ${promptText}
     const cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
     
     try {
-      return JSON.parse(cleanedText);
+      const parsed = JSON.parse(cleanedText);
+      return Array.isArray(parsed) ? parsed : [];
     } catch (parseError) {
-      console.error("JSON Parse Error:", parseError, "Cleaned Text:", cleanedText);
+      console.error("JSON Parse Error:", parseError, "Cleaned Text:", cleanedText.substring(0, 500));
       throw new Error("Lỗi cấu trúc dữ liệu AI. Vui lòng thử lại.");
     }
   } catch (error: any) {
     console.error("Question Gen Error:", error);
-    throw new Error("Lỗi kết nối AI. Vui lòng kiểm tra dung lượng file (tối đa 1000 trang) hoặc kiểm tra API Key.");
+    throw new Error(error.message || "Lỗi kết nối AI. Vui lòng kiểm tra API Key.");
   }
 };
 
+/**
+ * Fix M-02: Sửa format `contents` thành array object chuẩn Gemini API
+ */
 export const evaluateOralAnswer = async (
     question: string,
     correctAnswerOrContext: string,
@@ -294,9 +325,17 @@ export const evaluateOralAnswer = async (
     try {
       const ai = getAI();
       
+      const evaluationPrompt = `Đánh giá câu trả lời môn học.
+Câu hỏi: ${question}
+Đáp án chuẩn: ${correctAnswerOrContext}
+Câu trả lời sinh viên: ${userAnswer}
+
+Hãy cho điểm từ 0-10 và nhận xét ngắn gọn bằng tiếng Việt.`;
+
       const { response } = await generateWithFallback(ai, {
           model: PRIMARY_MODEL,
-          contents: `Đánh giá câu trả lời môn học.\nCâu hỏi: ${question}\nĐáp án chuẩn: ${correctAnswerOrContext}\nCâu trả lời sinh viên: ${userAnswer}`,
+          // Fix M-02: contents phải là array of message objects, không phải string
+          contents: [{ role: 'user', parts: [{ text: evaluationPrompt }] }],
           config: { 
               responseMimeType: "application/json", 
               temperature: 0.3,
@@ -318,11 +357,11 @@ export const evaluateOralAnswer = async (
       try {
           return JSON.parse(cleanedText);
       } catch (parseError) {
-          console.error("Evaluation Parse Error:", parseError, "Text:", cleanedText);
+          console.error("Evaluation Parse Error:", parseError);
           return { score: 0, feedback: "Lỗi cấu trúc dữ liệu AI khi đánh giá." };
       }
     } catch (error: any) {
       console.error("Evaluation Error:", error);
-      throw new Error("Lỗi kết nối AI. Vui lòng kiểm tra dung lượng file (tối đa 1000 trang) hoặc kiểm tra API Key.");
+      throw new Error(error.message || "Lỗi kết nối AI khi chấm điểm.");
     }
 };

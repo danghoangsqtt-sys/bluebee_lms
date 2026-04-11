@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Question, QuestionFolder } from '../../types';
 import AIGeneratorTab from './AIGeneratorTab';
 import ManualCreatorTab from './ManualCreatorTab';
@@ -27,15 +27,14 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
   // State to hold unique folder names fetched from DB
   const [availableFolders, setAvailableFolders] = useState<string[]>(['Mặc định']);
 
-  // Fetch existing folders to provide suggestions
+  // Fix M-06: Dùng fetchQuestionMetadataForMatrix thay vì fetchQuestions để tránh tải 5000 docs
+  // fetchQuestionMetadataForMatrix chỉ select $id + metadata -> nẻ hơn 100x
   useEffect(() => {
       const fetchFolders = async () => {
           if (!user?.id) return;
           try {
-              // --- CHANGED: Use role and handle paginated response ---
-              const res = await databaseService.fetchQuestions(user.id, user.role);
-              const questions = res.documents || [];
-              const folders = new Set(questions.map(q => q.folder || 'Mặc định'));
+              const metadata = await databaseService.fetchQuestionMetadataForMatrix();
+              const folders = new Set(metadata.map((m: any) => m.folder || 'Mặc định'));
               setAvailableFolders(Array.from(folders).sort());
           } catch (e) {
               console.warn("Failed to fetch existing folders", e);

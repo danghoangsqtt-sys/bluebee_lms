@@ -1,6 +1,4 @@
-
-// @google/genai initialization rules followed: use process.env.API_KEY.
-import { GoogleGenAI } from "@google/genai";
+// Fix M-08: Xóa import GoogleGenAI không sử dụng
 import { VectorChunk, PdfMetadata } from "../types";
 import * as pdfjsLib from "pdfjs-dist";
 
@@ -19,10 +17,11 @@ const parsePdfDate = (dateStr: string | undefined): string => {
 };
 
 // Duplicate helper locally to avoid circular dependencies with geminiService
+// Fix C-02: Dùng import.meta.env thay cho process.env (Vite không có process.env)
 const getApiKey = (): string | undefined => {
     const customKey = localStorage.getItem('DTS_GEMINI_API_KEY');
     if (customKey && customKey.trim().length > 0) return customKey;
-    return process.env.API_KEY;
+    return import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
 };
 
 export const extractDataFromPDF = async (fileOrUrl: File | string): Promise<{ text: string; metadata: PdfMetadata }> => {

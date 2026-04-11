@@ -1,5 +1,6 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
-import { databaseService, fetchStudentAttemptCount } from '../../services/databaseService';
+import React, { useState, useEffect, useMemo } from 'react';
+// Fix M-07: Xóa import fetchStudentAttemptCount không sử dụng
+import { databaseService } from '../../services/databaseService';
 import { databases, APPWRITE_CONFIG, Query } from '../../lib/appwrite';
 import ExamRoom from '../OnlineTest/ExamRoom';
 import ExamStatistics from '../ExamStatistics';
@@ -188,7 +189,9 @@ export default function SelfStudyManager({ user }: { user: any }) {
             const { examQuestions, answerData } = generateExamPaper(
                 examQuestionsToUse, 
                 examQuestionsToUse.length, 
-                "ONLINE_TEST"
+                "ONLINE_TEST",
+                exam.shuffle_questions !== false,
+                exam.shuffle_options !== false
             );
             
             setExamQuestions(examQuestions);

@@ -15,12 +15,15 @@ export const shuffleArray = <T>(array: T[]): T[] => {
 };
 
 /**
- * Helper to remove prefixes like "A. ", "B)", "C: " from strings
+ * Fix H-02: Helper to remove prefixes like "A. ", "B)", "C: " from strings
+ * Chỉ strip nếu pattern hợp lệ: chữ cái đơn + dấu phân cách + khoảng trắng
+ * Không strip nếu là từ thửng ("Áp dụng", "Analysis"...)
  */
 const stripPrefix = (text: string): string => {
     if (!text) return '';
-    // Removes A-Z followed by dot, colon, or parenthesis at the start
-    return text.replace(/^[A-Z][\.\:\)]\s*/i, '').trim();
+    // Chỉ strip khi có đúng pattern: [A-F]. hoặc [A-F]) hoặc [A-F]: + khoảng trắng
+    // Regex này đảm bảo không cắt nhầm từ như "Áp dụng" hay "Always"
+    return text.replace(/^([A-F])([\.\:\)])\s+/i, '').trim();
 };
 
 export interface AnswerEntry {
@@ -43,8 +46,8 @@ export interface GeneratedExamData {
  */
 import { ID } from '../lib/appwrite';
 
-export const generateExamPaper = (sourceQuestions: any[], count: number, examCode: string): GeneratedExamData => {
-    const selected = shuffleArray(sourceQuestions).slice(0, count);
+export const generateExamPaper = (sourceQuestions: any[], count: number, examCode: string, shuffleQ: boolean = true, shuffleO: boolean = true): GeneratedExamData => {
+    const selected = shuffleQ ? shuffleArray(sourceQuestions).slice(0, count) : [...sourceQuestions].slice(0, count);
     const finalQuestions: any[] = [];
     
     // answerData chứa nhiều thông tin hơn (Chữ cái, Nội dung, Giải thích)
@@ -58,7 +61,8 @@ export const generateExamPaper = (sourceQuestions: any[], count: number, examCod
 
         if (q.type === 'MULTIPLE_CHOICE' && Array.isArray(q.options)) {
             const rawCorrect = (q.correctAnswer || '').trim();
-            const cleanOptions = q.options.map((opt: any) => String(opt).replace(/^[A-D][\.\:\)]\s*/, '').trim());
+            // Fix H-02: Dùng stripPrefix để clean options nhất quán
+            const cleanOptions = q.options.map((opt: any) => stripPrefix(String(opt)));
             
             // Xác định nội dung đáp án đúng:
             let correctContent = '';
@@ -80,7 +84,7 @@ export const generateExamPaper = (sourceQuestions: any[], count: number, examCod
             const optionsArray: { text: string; originalIndex: number }[] = cleanOptions.map((text: string, originalIndex: number) => ({ text, originalIndex }));
 
             // Xáo trộn đáp án an toàn bằng object
-            const shuffledOptions = shuffleArray<{ text: string; originalIndex: number }>(optionsArray);
+            const shuffledOptions = shuffleO ? shuffleArray<{ text: string; originalIndex: number }>(optionsArray) : optionsArray;
             
             const prefixes = ['A', 'B', 'C', 'D', 'E', 'F'];
             const finalOptions = shuffledOptions.map((opt, i) => `${prefixes[i]}. ${opt.text}`);

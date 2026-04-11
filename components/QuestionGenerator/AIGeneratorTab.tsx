@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { extractTextFromPDF } from '../../services/documentProcessor';
 import { generateQuestionsByAI } from '../../services/geminiService';
 import { Question, QuestionType, QuestionFolder } from '../../types';
@@ -65,33 +65,34 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
         .filter(([_, c]) => c > 0)
         .map(([l, c]) => `${c} câu mức độ ${l}`)
         .join(', ');
-      
-      // DEBUG: Log payload
-      console.log("Payload gửi lên AI:", { 
-        document: pdfFile?.name || "No PDF", 
-        customPrompt, 
-        totalQuestions, 
-        qType, 
-        bloomRequest,
-        targetFolder 
-      });
 
+      // Fix H-01: Tách prompt và contextText hoàn toàn riêng biệt
+      // Không nhúng contextContent vào prompt string (gây mất context sau 15K chars)
       if (!pdfFile && !customPrompt.trim()) {
         setIsLoading(false);
         return onNotify("Vui lòng tải tài liệu lên hoặc nhập nội dung gợi ý trước khi tạo câu hỏi!", "error");
       }
       
-      const prompt = `Dựa vào tài liệu: "${contextContent.substring(0, 15000)}" 
-      ${customPrompt ? `Yêu cầu bổ sung: "${customPrompt}"` : ""}
-      Hãy tạo ${totalQuestions} câu ${qType === QuestionType.MULTIPLE_CHOICE ? 'Trắc nghiệm (MULTIPLE_CHOICE)' : 'Tự luận (ESSAY)'} bao gồm: ${bloomRequest}.
+      // Prompt mô tả yêu cầu - không chứa context (context truyền riêng)
+      const prompt = [
+        customPrompt ? `Yêu cầu bổ sung: "${customPrompt}"` : '',
+        `Hãy tạo ${totalQuestions} câu ${qType === QuestionType.MULTIPLE_CHOICE ? 'Trắc nghiệm (MULTIPLE_CHOICE)' : 'Tự luận (ESSAY)'} bao gồm: ${bloomRequest}.`,
+        '',
+        'YÊu CẦU QUAN TRỌNG:',
+        '1. Với câu hỏi Trắc nghiệm: Phải có 4 phương án rõ ràng, 1 đáp án đúng và phần giải thích tại sao đúng.',
+        "2. Với câu hỏi Tự luận: Nội dung câu hỏi phải mang tính gợi mở/vấn đáp. Trường 'correctAnswer' PHẢI chứa nội dung đáp án chuẩn chi tiết và đầy đủ.",
+        "3. Sử dụng LaTeX cho công thức toán/điện trong dấu $.",
+        "4. Trả về JSON array. Trường 'type' bắt buộc là 'MULTIPLE_CHOICE' hoặc 'ESSAY'."
+      ].filter(Boolean).join('\n');
       
-      YÊU CẦU QUAN TRỌNG:
-      1. Với câu hỏi Trắc nghiệm: Phải có 4 phương án rõ ràng, 1 đáp án đúng và phần giải thích tại sao đúng.
-      2. Với câu hỏi Tự luận: Nội dung câu hỏi phải mang tính gợi mở/vấn đáp. Trường 'correctAnswer' PHẢI chứa nội dung đáp án chuẩn chi tiết và đầy đủ để Cán bộ quản lý chấm điểm.
-      3. Sử dụng LaTeX cho công thức toán/điện trong dấu $.
-      4. Trả về JSON array. Trường 'type' bắt buộc là 'MULTIPLE_CHOICE' hoặc 'ESSAY'.`;
-      
-      const rawQuestions = await generateQuestionsByAI(prompt, totalQuestions, "Phân tích tài liệu");
+      // Fix H-01: Truyền contextContent như tham số riêng (4th param), không nhúng vào prompt
+      // Với PDF dài, geminiService sẽ cắt ngắn đúng cách và truyền đầy đủ nội dung
+      const rawQuestions = await generateQuestionsByAI(
+        prompt, 
+        totalQuestions, 
+        "Phân tích tài liệu",
+        contextContent || undefined  // Fix H-01: Truyền contextText đầy đủ như tham số riêng
+      );
       
       const processed = rawQuestions.map(q => ({
         ...q, 

@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
-import { databaseService, fetchStudentAttemptCount } from '../../services/databaseService';
+import React, { useState, useEffect, useMemo } from 'react';
+import { databaseService, fetchStudentAttemptCount, fetchLatestExamAttempt } from '../../services/databaseService';
 import { databases, APPWRITE_CONFIG, Query } from '../../lib/appwrite';
 import ExamRoom from './ExamRoom';
 import LiveProctoring from './LiveProctoring';
@@ -251,15 +251,20 @@ export default function OnlineTestManager({ user }: { user: any }) {
 
         // 3. Kiểm tra số lần thi
         if (user?.id && exam.max_attempts && exam.max_attempts < 9999) {
-            try {
-                const attemptCount = await fetchStudentAttemptCount(exam.id, user.id);
-                if (attemptCount >= exam.max_attempts) {
-                    alert(`Bạn đã hết số lần thi cho phép (${exam.max_attempts} lần). Không thể thi thêm.`);
-                    return;
+             try {
+                // Kiểm tra xem có bài thi dở dang không (chưa nộp)
+                const latestAttempt = await fetchLatestExamAttempt(exam.id, user.id);
+                const hasIncomplete = latestAttempt && (latestAttempt.status === 'in_progress' || latestAttempt.status === 'disconnected');
+                
+                if (!hasIncomplete) {
+                    const attemptCount = await fetchStudentAttemptCount(exam.id, user.id);
+                    if (attemptCount >= exam.max_attempts) {
+                        alert(`Bạn đã hết số lần thi cho phép (${exam.max_attempts} lần). Không thể thi thêm.`);
+                        return;
+                    }
                 }
             } catch (err) {
                 console.warn('Lỗi kiểm tra số lần thi:', err);
-                // Cho phép thi tiếp nếu API lỗi
             }
         }
 
@@ -283,7 +288,9 @@ export default function OnlineTestManager({ user }: { user: any }) {
             const { examQuestions, answerData } = generateExamPaper(
                 examQuestionsToUse, 
                 examQuestionsToUse.length, 
-                "ONLINE_TEST"
+                "ONLINE_TEST",
+                exam.shuffle_questions !== false,
+                exam.shuffle_options !== false
             );
             
             setExamQuestions(examQuestions);

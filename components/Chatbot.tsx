@@ -1,10 +1,9 @@
 
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { generateChatResponse } from '../services/geminiService';
 import { ChatMessage, KnowledgeDocument } from '../types';
 import { formatContent } from '../utils/textFormatter';
-import { Link } from 'react-router-dom';
+// Fix L-01: Xóa import Link không sử dụng
 import { useAuth } from '../contexts/AuthContext';
 
 interface ChatbotProps {
@@ -20,17 +19,19 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   
-  const getInitialMessage = () => {
+  // Fix L-02: Dùng useCallback để mín hóa sự tạo lại function và tránh warning deps
+  const getInitialMessage = useCallback(() => {
       if (user?.role === 'teacher') return `Xin chào Cán bộ quản lý ${user.fullName}. Tôi có thể hỗ trợ gì cho công việc của bạn hôm nay?`;
       if (user?.role === 'admin') return `Hệ thống sẵn sàng. Xin chào Quản trị viên ${user.fullName}.`;
       return `Chào ${user?.fullName || 'bạn'}. Tôi là trợ lý học tập AI. Bạn cần giải đáp thắc mắc gì về môn học?`;
-  };
+  }, [user]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeModel, setActiveModel] = useState<string>(''); 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Fix L-02: Thêm getInitialMessage vào deps để có initial message chính xác
   useEffect(() => {
       if (user && messages.length === 0) {
           setMessages([{
@@ -40,7 +41,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
               timestamp: Date.now(),
           }]);
       }
-  }, [user]);
+  }, [user, getInitialMessage]); // Fix L-02: Thêm getInitialMessage vào deps
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -68,10 +69,15 @@ const Chatbot: React.FC<ChatbotProps> = ({ temperature, maxTokens, aiVoice = 'Ko
     setActiveModel('');
 
     try {
-        const history = messages.map(m => ({
-            role: m.role,
-            parts: [{ text: m.text }]
-        }));
+        // Fix C-03: Lọc bỏ welcome message khỏi API history (không cần gửi)
+        // và chỉ gửi tối đa 20 tin nhắn cuối (giới hạn context)
+        const history = messages
+            .filter(m => m.id !== 'welcome') // Bỏ welcome message
+            .slice(-20)                       // Giới hạn 20 tin
+            .map(m => ({
+                role: m.role,
+                parts: [{ text: m.text }]
+            }));
 
         const response = await generateChatResponse(
             history, 

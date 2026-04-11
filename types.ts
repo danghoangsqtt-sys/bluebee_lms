@@ -272,6 +272,13 @@ export interface Exam {
   // Runtime / config properties
   exam_purpose?: string;
   status?: string;
+  // Fix L-05: Thêm các fields runtime từ mapDbExamToLocal để type-safe hơn
+  start_time?: string | null;
+  end_time?: string | null;
+  exam_password?: string | null;
+  shuffle_questions?: boolean;
+  shuffle_options?: boolean;
+  max_attempts?: number;
 }
 
 export interface Lecture {
