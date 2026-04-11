@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { databaseService } from '../../services/databaseService';
 import { databases, APPWRITE_CONFIG, Query } from '../../lib/appwrite';
 import ExamRoom from '../OnlineTest/ExamRoom';
+import ExamControlDashboard from '../OnlineTest/ExamControlDashboard';
 import ExamStatistics from '../ExamStatistics';
 import ExamCreator from '../ExamCreator';
 import { generateExamPaper } from '../../utils/examEngine';
@@ -11,6 +12,7 @@ import { Exam } from '../../types';
 export default function SelfStudyManager({ user }: { user: any }) {
     const [exams, setExams] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [dashboardExam, setDashboardExam] = useState<any>(null);
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [selectedExam, setSelectedExam] = useState<any>(null);
 
@@ -161,12 +163,16 @@ export default function SelfStudyManager({ user }: { user: any }) {
     };
 
     const handleTakeExam = async (exam: any) => {
-        const now = new Date();
-        if (exam.start_time && now < new Date(exam.start_time)) { alert("Chưa đến giờ mở đề!"); return; }
-        if (exam.end_time && now > new Date(exam.end_time)) { alert("Đã đóng đề!"); return; }
-        if (exam.exam_password) {
-            const pass = window.prompt("Nhập mật khẩu ôn tập:");
-            if (pass !== exam.exam_password) { alert("Sai mật khẩu!"); return; }
+        const isStudent = user?.role === 'student';
+
+        if (isStudent) {
+            const now = new Date();
+            if (exam.start_time && now < new Date(exam.start_time)) { alert("Chưa đến giờ mở đề!"); return; }
+            if (exam.end_time && now > new Date(exam.end_time)) { alert("Đã đóng đề!"); return; }
+            if (exam.exam_password) {
+                const pass = window.prompt("Nhập mật khẩu ôn tập:");
+                if (pass !== exam.exam_password) { alert("Sai mật khẩu!"); return; }
+            }
         }
 
         try {
@@ -300,6 +306,7 @@ export default function SelfStudyManager({ user }: { user: any }) {
                                     <div className="p-5 flex flex-col flex-1">
                                         <h3 className="font-black text-blue-900 text-base mb-2 cursor-pointer hover:text-blue-700 transition-colors uppercase tracking-wider" onClick={() => {
                                             if (user?.role === 'student') handleTakeExam(exam);
+                                            else setDashboardExam(exam);
                                         }}>{exam.title}</h3>
                                 
                                 <div className="space-y-1.5 mb-3 text-[10px] font-mono text-slate-600">
@@ -314,19 +321,15 @@ export default function SelfStudyManager({ user }: { user: any }) {
                                         {exam.status === 'published' ? '● PUBLISHED' : '○ DRAFT'}
                                     </span>
                                     {isTeacherOrAdmin && (
-                                        <div className="flex gap-3">
-                                            <button 
-                                                onClick={() => setStatsExam(exam)} 
-                                                className="text-amber-700 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors"
-                                                title="Xem thống kê bài ôn tập"
-                                            >
-                                                <i className="fas fa-chart-bar mr-1"></i> Stats
-                                            </button>
-                                            <button onClick={() => openConfigModal(exam)} className="text-blue-900 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors">
-                                                <i className="fas fa-cog mr-1"></i> Config
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setDashboardExam(exam)} className="text-blue-900 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors">
+                                                <i className="fas fa-cogs mr-1"></i> Quản trị
                                             </button>
                                             <button onClick={() => setEditingExam(exam as Exam)} className="text-blue-600 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Sửa nội dung">
                                                 <i className="fas fa-pen mr-1"></i> Edit
+                                            </button>
+                                            <button onClick={() => handleTakeExam(exam)} className="text-purple-700 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Thi thử">
+                                                <i className="fas fa-play mr-1"></i> Thi thử
                                             </button>
                                             <button onClick={() => handleDeleteExam(exam.id, exam.title)} className="text-red-600 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Xóa đề">
                                                 <i className="fas fa-trash-alt mr-1"></i> Del
@@ -447,6 +450,22 @@ export default function SelfStudyManager({ user }: { user: any }) {
                         };
                         fetchData();
                     }} 
+                />
+            )}
+
+            {/* DASHBOARD MỚI */}
+            {dashboardExam && (
+                <ExamControlDashboard 
+                    exam={dashboardExam} 
+                    onClose={() => setDashboardExam(null)} 
+                    onConfigSave={async (payload) => {
+                        try {
+                            await databaseService.updateExam(dashboardExam.id || dashboardExam.$id, payload);
+                            setExams(prev => prev.map(e => (e.id === dashboardExam.id || e.$id === dashboardExam.$id) ? { ...e, ...payload } : e));
+                            alert("Lưu cấu hình thành công!");
+                        } catch(e) { alert("Lỗi khi lưu!"); }
+                    }}
+                    totalQuestions={dashboardExam.questionIds?.length || dashboardExam.question_ids?.length || dashboardExam.questions?.length || 0}
                 />
             )}
         </div>

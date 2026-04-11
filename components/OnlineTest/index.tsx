@@ -4,6 +4,7 @@ import { databases, APPWRITE_CONFIG, Query } from '../../lib/appwrite';
 import ExamRoom from './ExamRoom';
 import LiveProctoring from './LiveProctoring';
 import ExamAnalytics from './ExamAnalytics';
+import ExamControlDashboard from './ExamControlDashboard';
 import ExamCreator from '../ExamCreator';
 import { generateExamPaper } from '../../utils/examEngine';
 import { Exam } from '../../types';
@@ -11,6 +12,7 @@ import { Exam } from '../../types';
 export default function OnlineTestManager({ user }: { user: any }) {
     const [exams, setExams] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [dashboardExam, setDashboardExam] = useState<any>(null);
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [selectedExam, setSelectedExam] = useState<any>(null);
 
@@ -232,25 +234,29 @@ export default function OnlineTestManager({ user }: { user: any }) {
     };
 
     const handleTakeExam = async (exam: any) => {
-        // 1. Kiểm tra thời gian
-        const now = new Date();
-        if (exam.start_time && now < new Date(exam.start_time)) {
-            alert("Chưa đến giờ làm bài!"); return;
-        }
-        if (exam.end_time && now > new Date(exam.end_time)) {
-            alert("Đã hết thời gian làm bài!"); return;
-        }
+        const isStudent = user?.role === 'student';
 
-        // 2. Kiểm tra mật khẩu
-        if (exam.exam_password) {
-            const pass = window.prompt("Bài thi này có mật khẩu. Vui lòng nhập mật khẩu:");
-            if (pass !== exam.exam_password) {
-                alert("Mật khẩu không chính xác!"); return;
+        // 1. Kiểm tra thời gian (Chỉ áp dụng cho học viên, Giáo viên/Admin thi thử thoải mái)
+        if (isStudent) {
+            const now = new Date();
+            if (exam.start_time && now < new Date(exam.start_time)) {
+                alert("Chưa đến giờ làm bài!"); return;
+            }
+            if (exam.end_time && now > new Date(exam.end_time)) {
+                alert("Đã hết thời gian làm bài!"); return;
+            }
+
+            // 2. Kiểm tra mật khẩu
+            if (exam.exam_password) {
+                const pass = window.prompt("Bài thi này có mật khẩu. Vui lòng nhập mật khẩu:");
+                if (pass !== exam.exam_password) {
+                    alert("Mật khẩu không chính xác!"); return;
+                }
             }
         }
 
-        // 3. Kiểm tra số lần thi
-        if (user?.id && exam.max_attempts && exam.max_attempts < 9999) {
+        // 3. Kiểm tra số lần thi (Chỉ học viên bị giới hạn)
+        if (isStudent && user?.id && exam.max_attempts && exam.max_attempts < 9999) {
              try {
                 // Kiểm tra xem có bài thi dở dang không (chưa nộp)
                 const latestAttempt = await fetchLatestExamAttempt(exam.id, user.id);
@@ -406,7 +412,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
                                     <div className="p-5 flex flex-col flex-1">
                                         <h3 className="font-black text-blue-900 text-base mb-2 cursor-pointer hover:text-blue-700 transition-colors uppercase tracking-wider" onClick={() => {
                                             if (user?.role === 'student') handleTakeExam(exam);
-                                            else openConfigModal(exam);
+                                            else setDashboardExam(exam);
                                         }}>{exam.title}</h3>
                                         
                                         <div className="space-y-1.5 mb-3 text-[10px] font-mono text-slate-600">
@@ -423,20 +429,15 @@ export default function OnlineTestManager({ user }: { user: any }) {
                                                 {exam.status === 'published' ? '● PUBLISHED' : '○ DRAFT'}
                                             </span>
                                             {isTeacherOrAdmin && (
-                                                <div className="flex gap-3">
-                                                    {exam.status === 'published' && (
-                                                        <button onClick={() => setStatsExam(exam)} className="text-green-700 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Trực tuyến/Giám thị">
-                                                            <i className="fas fa-video mr-1"></i> Live
-                                                        </button>
-                                                    )}
-                                                    <button onClick={() => setStatsExam(exam)} className="text-amber-700 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Thống kê">
-                                                        <i className="fas fa-chart-pie mr-1"></i> Stats
-                                                    </button>
-                                                    <button onClick={() => openConfigModal(exam)} className="text-blue-900 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors">
-                                                        <i className="fas fa-cog mr-1"></i> Config
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => setDashboardExam(exam)} className="text-blue-900 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors">
+                                                        <i className="fas fa-cogs mr-1"></i> Quản trị
                                                     </button>
                                                     <button onClick={() => setEditingExam(exam as Exam)} className="text-blue-600 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Sửa nội dung">
                                                         <i className="fas fa-pen mr-1"></i> Edit
+                                                    </button>
+                                                    <button onClick={() => handleTakeExam(exam)} className="text-purple-700 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Thi thử môn học">
+                                                        <i className="fas fa-play mr-1"></i> Thi thử
                                                     </button>
                                                     <button onClick={() => handleDeleteExam(exam.id, exam.title)} className="text-red-600 text-[10px] font-bold uppercase tracking-wider hover:underline transition-colors" title="Xóa đề">
                                                         <i className="fas fa-trash-alt mr-1"></i> Del
@@ -544,27 +545,7 @@ export default function OnlineTestManager({ user }: { user: any }) {
             )}
 
             {/* DASHBOARDS THỐNG KÊ & GIÁM THỊ */}
-            {statsExam && (() => {
-                const isEnded = statsExam.end_time && new Date(statsExam.end_time).getTime() < Date.now();
-                if (isEnded) {
-                    return (
-                        <ExamAnalytics 
-                            examId={statsExam.id} 
-                            examTitle={statsExam.title} 
-                            onClose={() => setStatsExam(null)} 
-                        />
-                    );
-                } else {
-                    return (
-                        <LiveProctoring 
-                            examId={statsExam.id} 
-                            examTitle={statsExam.title} 
-                            totalQuestions={getExamTotalQuestions(statsExam)}
-                            onClose={() => setStatsExam(null)} 
-                        />
-                    );
-                }
-            })()}
+
 
             {editingExam && (
                 <ExamCreator 
@@ -580,6 +561,22 @@ export default function OnlineTestManager({ user }: { user: any }) {
                         };
                         fetchData();
                     }} 
+                />
+            )}
+
+            {/* DASHBOARD MỚI */}
+            {dashboardExam && (
+                <ExamControlDashboard 
+                    exam={dashboardExam} 
+                    onClose={() => setDashboardExam(null)} 
+                    onConfigSave={async (payload) => {
+                        try {
+                            await databaseService.updateExam(dashboardExam.id || dashboardExam.$id, payload);
+                            setExams(prev => prev.map(e => (e.id === dashboardExam.id || e.$id === dashboardExam.$id) ? { ...e, ...payload } : e));
+                            alert("Lưu cấu hình thành công!");
+                        } catch(e) { alert("Lỗi khi lưu!"); }
+                    }}
+                    totalQuestions={getExamTotalQuestions(dashboardExam)}
                 />
             )}
         </div>

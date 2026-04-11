@@ -365,3 +365,42 @@ Hãy cho điểm từ 0-10 và nhận xét ngắn gọn bằng tiếng Việt.`;
       throw new Error(error.message || "Lỗi kết nối AI khi chấm điểm.");
     }
 };
+
+export const generateStudentPerformanceEvaluation = async (
+  studentName: string,
+  score: number,
+  timeSpentStr: string,
+  redFlags: number,
+  wrongQuestionContents: string[]
+): Promise<string> => {
+  try {
+    const ai = getAI();
+    let wrongText = "Không có câu sai.";
+    if (wrongQuestionContents.length > 0) {
+      wrongText = wrongQuestionContents.map((q, i) => `${i + 1}. ${q}`).join('\n');
+    }
+
+    const prompt = `Đánh giá khách quan và ngắn gọn (1 đoạn khoảng 30-50 chữ) về bài kiểm tra của học sinh ${studentName}.
+Thông tin bài thi:
+- Điểm: ${score}/10
+- Thời gian làm bài: ${timeSpentStr}
+- Số lần cảnh báo gian lận (Tab switch/Mất kết nối): ${redFlags}
+- Các nội dung làm sai chính:
+${wrongText}
+
+Hãy viết một nhận xét dành cho giáo viên, đánh giá thái độ (dựa vào redFlags), tốc độ làm bài và kiến thức bị hổng (dựa vào cấu sai). Không cần lời chào hỏi, đi thẳng vào đánh giá.`;
+
+    const { response } = await generateWithFallback(ai, {
+      model: PRIMARY_MODEL,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.3, // Low temp for analytical evaluation
+      }
+    });
+
+    return response.text || "AI không thể tạo nhận xét.";
+  } catch (error) {
+    console.error("Gemini Evaluation Error:", error);
+    return "Không thể khởi tạo nhận xét, lỗi kết nối dịch vụ AI.";
+  }
+};

@@ -102,6 +102,7 @@ const mapDbExamToLocal = (db: any): Exam => {
     createdAt: db.$createdAt,
     
     // Đọc mọi cài đặt từ chuỗi nén configObj
+    duration: db.duration || (configObj.time ? parseFloat(configObj.time) : 60),
     start_time: configObj.start_time || db.start_time,
     end_time: configObj.end_time || db.end_time,
     exam_password: configObj.exam_password || db.exam_password,
@@ -913,6 +914,37 @@ export const updateExamResult = async (id: string, resultData: any) => {
             resultData
         );
     } catch (error) { console.error("Lỗi cập nhật điểm thi:", error); throw error; }
+};
+
+export const updateExamResultAI_Evaluation = async (id: string, evaluation: string) => {
+    try {
+        // Fetch existing to append to answers_data as a safe fallback
+        const existingDoc = await databases.getDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.examResults,
+            id
+        );
+        
+        let answersDataObj: any = {};
+        if (existingDoc.answers_data) {
+            try {
+                answersDataObj = JSON.parse(existingDoc.answers_data);
+            } catch(e) {}
+        }
+        
+        answersDataObj.ai_evaluation = evaluation;
+        const resultString = JSON.stringify(answersDataObj);
+        
+        return await databases.updateDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.examResults,
+            id,
+            { answers_data: resultString }
+        );
+    } catch (error) { 
+        console.error("Lỗi cập nhật nhận xét AI:", error); 
+        throw error; 
+    }
 };
 
 export const fetchLatestExamAttempt = async (examId: string, studentId: string): Promise<any | null> => {

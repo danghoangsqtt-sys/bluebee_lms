@@ -172,14 +172,19 @@ const ExamCreator: React.FC<ExamCreatorProps> = ({ viewExam, editExam, onBack, o
 
   // Load full data for existing exam
   useEffect(() => {
-    if (viewExam && viewExam.questionIds?.length > 0) {
+    if (currentExam && currentExam.questionIds?.length > 0) {
         const loadFull = async () => {
-             const full = await databaseService.fetchQuestionsByCriteria(viewExam.questionIds);
-             setSelectedQuestionsFullData(full);
+             const full = await databaseService.fetchQuestionsByCriteria(currentExam.questionIds);
+             const deepCopiedData = full.map(q => JSON.parse(JSON.stringify(q)));
+             setSelectedQuestionsFullData(deepCopiedData);
+             
+             // Sinh bản nháp đáp án để có thể xem trước và in ấn
+             const { answerData: data } = generateExamPaper(deepCopiedData, deepCopiedData.length, examConfig.examCode, false, false);
+             setAnswerData(data);
         };
         loadFull();
     }
-  }, [viewExam]);
+  }, [currentExam, examConfig.examCode]);
 
   const selectedQuestions = selectedQuestionsFullData;
 

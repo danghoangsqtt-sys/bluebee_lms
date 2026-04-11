@@ -4,18 +4,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { submitExamResult, fetchLatestExamAttempt, updateExamResult } from '../../services/databaseService';
 
-const MathContent = ({ content }: { content: string }) => {
-    return (
-        <div className="prose prose-slate max-w-none">
-            <ReactMarkdown 
-                remarkPlugins={[remarkMath]} 
-                rehypePlugins={[rehypeKatex]}
-            >
-                {content}
-            </ReactMarkdown>
-        </div>
-    );
-};
+import { formatContent } from '../../utils/textFormatter';
 
 export default function ExamRoom({ exam, questions, answerData, user, onExit }: { exam: any, questions: any[], answerData: any, user: any, onExit: () => void }) {
     const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -473,7 +462,7 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
                                 </button>
                             </div>
                             <div className="text-slate-700 mb-4 text-base">
-                                <MathContent content={q.content} />
+                                {formatContent(q.content)}
                             </div>
                             
                             {q.imageUrl && (
@@ -504,7 +493,7 @@ export default function ExamRoom({ exam, questions, answerData, user, onExit }: 
                                             {optionLetter}
                                         </div>
                                         <div className="font-medium text-slate-700 select-none flex-1">
-                                            <MathContent content={cleanOpt} />
+                                            {formatContent(cleanOpt)}
                                         </div>
                                         <input type="radio" name={`q-${qId}`} className="hidden" checked={isSelected} onChange={() => handleSelectOption(qId, optionLetter, true)} />
                                     </label>
