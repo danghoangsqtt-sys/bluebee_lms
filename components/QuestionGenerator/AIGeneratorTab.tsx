@@ -7,6 +7,7 @@ import ReviewList from './ReviewList';
 interface AIGeneratorTabProps {
   folders: QuestionFolder[];
   availableFolders: string[];
+  examFolders: string[];
   onQuestionsGenerated: (questions: Question[]) => void;
   onNotify: (message: string, type: any) => void;
   isLoading: boolean;
@@ -21,7 +22,8 @@ const BLOOM_LEVELS = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân t
 
 const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({ 
   folders,
-  availableFolders, 
+  availableFolders,
+  examFolders, 
   onQuestionsGenerated, 
   onNotify, 
   isLoading, 
@@ -41,6 +43,12 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
 
   const totalQuestions = Object.values(bloomCounts).reduce((a, b) => a + b, 0);
 
+  // Gộp thư mục đề thi: từ Appwrite custom folders + availableFolders (câu hỏi) + default  
+  const mergedExamFolders = React.useMemo(() => {
+    const set = new Set(['Mặc định', ...examFolders, ...availableFolders]);
+    return Array.from(set).sort();
+  }, [examFolders, availableFolders]);
+
   const normalizeType = (rawType: any): QuestionType => {
     const typeStr = String(rawType || "").toUpperCase();
     if (typeStr.includes("MULTIPLE") || typeStr.includes("TRẮC NGHIỆM") || typeStr.includes("TRAC NGHIEM")) {
@@ -52,7 +60,7 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
   const handleGenerate = async () => {
     if (totalQuestions === 0) return onNotify("Hãy chọn ít nhất 1 mức độ Bloom", "warning");
     if (!pdfFile && !customPrompt.trim()) return onNotify("Hãy tải lên tệp PDF hoặc nhập nội dung gợi ý", "warning");
-    if (!targetFolder.trim()) return onNotify("Vui lòng nhập tên thư mục lưu trữ", "warning");
+    if (!targetFolder.trim()) return onNotify("Vui lòng chọn thư mục lưu trữ", "warning");
 
     setIsLoading(true);
     try {
@@ -139,22 +147,26 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                    <label htmlFor="ai-folder-input" className="text-[10px] font-bold text-blue-900 uppercase tracking-widest block">Thư mục đề thi</label>
-                    <input 
-                        id="ai-folder-input"
-                        type="text"
-                        list="ai-folder-options"
-                        value={targetFolder} 
-                        onChange={e => setTargetFolder(e.target.value)} 
-                        title="Thư mục lưu trữ câu hỏi"
-                        placeholder="Tên thư mục..."
-                        className="w-full bg-white border border-slate-300 text-slate-700 px-4 py-3 rounded-sm font-bold text-sm outline-none focus:border-blue-900"
-                    />
-                    <datalist id="ai-folder-options">
-                        {availableFolders?.map((folderName, idx) => (
-                        <option key={`ai-folder-${idx}`} value={folderName} />
-                        ))}
-                    </datalist>
+                    <label htmlFor="ai-folder-input" className="text-[10px] font-bold text-blue-900 uppercase tracking-widest block">
+                        Thư mục đề thi
+                    </label>
+                    <div className="relative">
+                        <input
+                            id="ai-folder-input"
+                            list="ai-folder-datalist"
+                            value={targetFolder}
+                            onChange={e => setTargetFolder(e.target.value)}
+                            placeholder="Chọn hoặc nhập tên thư mục..."
+                            title="Chọn thư mục lưu trữ câu hỏi"
+                            className="w-full bg-white border border-slate-300 text-slate-700 px-4 py-3 rounded-sm font-bold text-sm outline-none focus:border-blue-900"
+                        />
+                        <datalist id="ai-folder-datalist">
+                            {mergedExamFolders.map((folderName, idx) => (
+                                <option key={`ai-folder-${idx}`} value={folderName} />
+                            ))}
+                        </datalist>
+                        <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

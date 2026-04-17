@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Question, QuestionType, QuestionFolder } from '../../types';
 import { formatContent } from '../../utils/textFormatter';
 import ReviewList from './ReviewList';
@@ -6,6 +6,7 @@ import ReviewList from './ReviewList';
 interface ManualCreatorTabProps {
   folders: QuestionFolder[]; 
   availableFolders: string[];
+  examFolders: string[];
   onQuestionCreated: (question: Question) => void;
   onQuestionsGenerated: (questions: Question[]) => void;
   onNotify: (message: string, type: any) => void;
@@ -20,7 +21,8 @@ interface ManualCreatorTabProps {
 const BLOOM_LEVELS = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
 
 const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({ 
-  availableFolders, 
+  availableFolders,
+  examFolders, 
   onQuestionCreated, 
   onNotify, 
   isLoading, 
@@ -44,6 +46,12 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
 
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [rightTab, setRightTab] = useState<'PREVIEW' | 'QUEUE'>('PREVIEW');
+
+  // Gộp thư mục đề thi: từ Appwrite custom folders + availableFolders (câu hỏi) + default  
+  const mergedExamFolders = React.useMemo(() => {
+    const set = new Set(['Mặc định', ...examFolders, ...availableFolders]);
+    return Array.from(set).sort();
+  }, [examFolders, availableFolders]);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -112,19 +120,24 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
       <div className="lg:col-span-5 flex flex-col overflow-y-auto pr-2 custom-scrollbar pb-6">
         <div className="bg-slate-50 border border-slate-300 rounded-sm p-6 space-y-6">
           <div className="space-y-4">
-            <label htmlFor="manual-folder" className="text-[10px] font-bold text-blue-900 uppercase tracking-widest block">Thư mục đề thi</label>
-            <input 
-              id="manual-folder"
-              type="text"
-              list="manual-folder-options"
-              value={manualQ.folder} 
-              onChange={e => setManualQ({...manualQ, folder: e.target.value})} 
-              className="w-full bg-white border border-slate-300 text-slate-700 px-4 py-3 rounded-sm font-bold text-sm outline-none focus:border-blue-900"
-              placeholder="Chọn hoặc nhập tên thư mục..."
-            />
-            <datalist id="manual-folder-options">
-              {availableFolders?.map((f, idx) => <option key={idx} value={f} />)}
-            </datalist>
+            <label htmlFor="manual-folder-input" className="text-[10px] font-bold text-blue-900 uppercase tracking-widest block">Thư mục đề thi</label>
+            <div className="relative">
+              <input
+                id="manual-folder-input"
+                list="manual-folder-datalist"
+                value={manualQ.folder}
+                onChange={e => setManualQ({...manualQ, folder: e.target.value})}
+                placeholder="Chọn hoặc nhập tên thư mục..."
+                title="Chọn thư mục lưu trữ câu hỏi"
+                className="w-full bg-white border border-slate-300 text-slate-700 px-4 py-3 rounded-sm font-bold text-sm outline-none focus:border-blue-900"
+              />
+              <datalist id="manual-folder-datalist">
+                {mergedExamFolders.map((f, idx) => (
+                  <option key={idx} value={f} />
+                ))}
+              </datalist>
+              <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+            </div>
           </div>
 
           <div className="space-y-4">

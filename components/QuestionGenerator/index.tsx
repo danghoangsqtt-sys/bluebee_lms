@@ -6,7 +6,7 @@ import ReviewList from './ReviewList';
 import { Link } from 'react-router-dom';
 import { databases, storage, APPWRITE_CONFIG, ID, Query } from '../../lib/appwrite';
 import { useAuth } from '../../contexts/AuthContext';
-import { databaseService } from '../../services/databaseService';
+import { databaseService, fetchCustomFolders } from '../../services/databaseService';
 
 interface QuestionGeneratorProps {
   folders: QuestionFolder[];
@@ -26,21 +26,44 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
   
   // State to hold unique folder names fetched from DB
   const [availableFolders, setAvailableFolders] = useState<string[]>(['Mặc định']);
+  // State cho danh sách thư mục đề thi từ Ngân hàng câu hỏi thi
+  const [examFolders, setExamFolders] = useState<string[]>([]);
 
-  // Fix M-06: Dùng fetchQuestionMetadataForMatrix thay vì fetchQuestions để tránh tải 5000 docs
-  // fetchQuestionMetadataForMatrix chỉ select $id + metadata -> nẻ hơn 100x
+  // Tải danh sách thư mục câu hỏi + thư mục đề thi từ DB
   useEffect(() => {
-      const fetchFolders = async () => {
+      const loadAllFolders = async () => {
           if (!user?.id) return;
           try {
-              const metadata = await databaseService.fetchQuestionMetadataForMatrix();
-              const folders = new Set(metadata.map((m: any) => m.folder || 'Mặc định'));
-              setAvailableFolders(Array.from(folders).sort());
+              const [metadata, eFolders, examsRes] = await Promise.all([
+                  databaseService.fetchQuestionMetadataForMatrix(),
+                  fetchCustomFolders('exam').catch(() => [] as string[]),
+                  databases.listDocuments(
+                      APPWRITE_CONFIG.dbId,
+                      APPWRITE_CONFIG.collections.exams,
+                      [Query.limit(500)]
+                  ).catch(() => ({ documents: [] }))
+              ]);
+
+              // 1. Thư mục câu hỏi
+              const questionFolderSet = new Set(metadata.map((m: any) => m.folder || 'Mặc định'));
+              setAvailableFolders(Array.from(questionFolderSet).sort());
+
+              // 2. Thư mục đề thi: custom folders + từ config các đề thi đã tồn tại
+              const examFolderSet = new Set<string>(['Mặc định', ...eFolders]);
+              (examsRes as any).documents.forEach((doc: any) => {
+                  try {
+                      const config = typeof doc.config === 'string'
+                          ? JSON.parse(doc.config)
+                          : (doc.config || {});
+                      if (config?.folder) examFolderSet.add(config.folder);
+                  } catch (_) {}
+              });
+              setExamFolders(Array.from(examFolderSet).sort());
           } catch (e) {
               console.warn("Failed to fetch existing folders", e);
           }
       };
-      fetchFolders();
+      loadAllFolders();
   }, [user]);
 
   const handleQuestionsGenerated = (questions: Question[]) => {
@@ -149,6 +172,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
                 <AIGeneratorTab 
                     folders={folders} 
                     availableFolders={availableFolders}
+                    examFolders={examFolders}
                     onQuestionsGenerated={handleQuestionsGenerated} 
                     onNotify={onNotify} 
                     isLoading={isLoading} 
@@ -162,6 +186,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
                 <ManualCreatorTab 
                     folders={folders} 
                     availableFolders={availableFolders}
+                    examFolders={examFolders}
                     onQuestionCreated={handleSingleQuestionCreated} 
                     onQuestionsGenerated={handleQuestionsGenerated} 
                     onNotify={onNotify} 
