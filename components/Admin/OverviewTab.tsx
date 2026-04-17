@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { databases, APPWRITE_CONFIG, ID, Query } from '../../lib/appwrite';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ScheduleItem {
   id: string;
@@ -16,6 +17,8 @@ interface TacticalTask {
 }
 
 const OverviewTab: React.FC = () => {
+  const { user } = useAuth();
+
   // --- LỊCH LÀM VIỆC STATE ---
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [newScheduleContent, setNewScheduleContent] = useState('');
@@ -88,14 +91,16 @@ const OverviewTab: React.FC = () => {
             APPWRITE_CONFIG.dbId,
             APPWRITE_CONFIG.collections.schedules,
             ID.unique(),
-            { 
-              title: newScheduleContent, // Sử dụng field title làm chuẩn chính
-              content: newScheduleContent, // Giữ lại content để tương thích ngược
+            {
+              title: newScheduleContent,
+              description: '',
               startDate: newScheduleDate,
-              endDate: newScheduleDate, 
+              endDate: newScheduleDate,
+              isAllDay: true,
+              color: '#3b82f6',
+              reminderMinutes: 0,
               class_id: targetType === 'class' ? targetId : 'all',
-              targetType,
-              targetId
+              creator_id: user?.id || ''
             }
         );
         setNewScheduleContent('');
