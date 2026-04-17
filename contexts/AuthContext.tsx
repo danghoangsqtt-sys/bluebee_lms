@@ -75,17 +75,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, pass: string) => {
-    await account.createEmailPasswordSession(email, pass);
+    const cleanEmail = email.trim();
+    await account.createEmailPasswordSession(cleanEmail, pass);
     await checkSession();
   };
 
   const register = async (email: string, pass: string, name: string, classId?: string) => {
+    const cleanEmail = email.trim();
+    const cleanName = name.trim();
+
     // 1. Tạo tài khoản Appwrite Identity
     const userId = ID.unique();
-    await account.create(userId, email, pass, name);
+    await account.create(userId, cleanEmail, pass, cleanName);
     
     // 2. Đăng nhập ngay lập tức để lấy session
-    await account.createEmailPasswordSession(email, pass);
+    await account.createEmailPasswordSession(cleanEmail, pass);
 
     // 3. Logic "Hồ sơ chờ" (Pre-registration)
     // Kiểm tra xem đã có profile nào được tạo trước bởi Admin với email này chưa
@@ -97,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existingProfiles = await databases.listDocuments(
         APPWRITE_CONFIG.dbId,
         APPWRITE_CONFIG.collections.profiles,
-        [Query.equal('email', email)]
+        [Query.equal('email', cleanEmail)]
       );
 
       if (existingProfiles.documents.length > 0) {

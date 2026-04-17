@@ -136,13 +136,13 @@ export default function StudentApproval() {
             <div className="flex gap-4 mb-6 border-b border-slate-200 pb-4">
                 <button 
                     onClick={() => setActiveTab('PENDING')}
-                    className={`px-6 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2 ${activeTab === 'PENDING' ? 'bg-orange-100 text-orange-700 shadow-sm border border-orange-200' : 'text-slate-500 hover:bg-slate-100 border border-transparent'}`}
+                    className={`px-6 py-2.5 rounded-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'PENDING' ? 'bg-orange-100 text-orange-700 shadow-sm border border-orange-200' : 'text-slate-500 hover:bg-slate-100 border border-transparent'}`}
                 >
                     <i className="fas fa-user-clock"></i> Chờ phê duyệt ({pendingStudents.length})
                 </button>
                 <button 
                     onClick={() => setActiveTab('APPROVED')}
-                    className={`px-6 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2 ${activeTab === 'APPROVED' ? 'bg-green-100 text-green-700 shadow-sm border border-blue-200' : 'text-slate-500 hover:bg-slate-100 border border-transparent'}`}
+                    className={`px-6 py-2.5 rounded-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'APPROVED' ? 'bg-green-100 text-green-700 shadow-sm border border-blue-200' : 'text-slate-500 hover:bg-slate-100 border border-transparent'}`}
                 >
                     <i className="fas fa-user-check"></i> Đã phê duyệt ({approvedStudents.length})
                 </button>

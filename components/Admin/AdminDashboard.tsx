@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import TeacherManager from './TeacherManager';
@@ -17,7 +17,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify }) => {
   const location = useLocation();
 
   const NavItem = ({ to, label, icon }: { to: string, label: string, icon: string }) => {
-    const active = location.pathname.endsWith(to);
+    const active = to === "" 
+      ? location.pathname === "/admin" || location.pathname === "/admin/"
+      : location.pathname.includes(`/admin/${to}`);
     return (
       <Link 
         to={to} 

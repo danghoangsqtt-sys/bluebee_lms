@@ -842,7 +842,7 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <AuthProvider>
-    <Router>
+    <Router future={{ v7_relativeSplatPath: true }}>
       <AppContent />
       <SpeedInsights />
     </Router>

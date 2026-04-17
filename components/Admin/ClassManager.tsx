@@ -219,12 +219,12 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 ml-8">Cấu trúc tổ chức đào tạo</p>
         </div>
         <div className="flex gap-3">
-            <button onClick={() => setShowAssignModal(true)} title="Phân công giảng dạy" className="bg-slate-100 text-slate-600 border border-slate-200 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"><i className="fas fa-user-tag"></i> Phân công</button>
-            <button onClick={() => setShowCreateModal(true)} title="Tạo lớp học mới" className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95"><i className="fas fa-plus"></i> Khởi tạo Lớp</button>
+            <button onClick={() => setShowAssignModal(true)} title="Phân công giảng dạy" className="bg-slate-100 text-slate-600 border border-slate-200 px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"><i className="fas fa-user-tag"></i> Phân công</button>
+            <button onClick={() => setShowCreateModal(true)} title="Tạo lớp học mới" className="bg-blue-600 text-white px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95"><i className="fas fa-plus"></i> Khởi tạo Lớp</button>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <div className="overflow-x-auto rounded-sm border border-slate-200">
         <table className="w-full text-left border-collapse">
             <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
@@ -244,7 +244,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                                         type="text" 
                                         value={editingClassName} 
                                         onChange={e => setEditingClassName(e.target.value)}
-                                        className="p-2 border-2 border-blue-600 rounded-lg outline-none font-bold text-sm text-slate-800 w-full"
+                                        className="p-2 border-2 border-blue-600 rounded-sm outline-none font-bold text-sm text-slate-800 w-full"
                                         title="Tên lớp mới"
                                         placeholder="Nhập tên lớp..."
                                         autoFocus
@@ -259,7 +259,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                         <td className="px-6 py-4">
                             {(c.teacherId && c.teacherId !== 'unassigned') ? (
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-xs">{c.teacherName?.charAt(0)}</div>
+                                    <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-sm flex items-center justify-center font-bold text-xs">{c.teacherName?.charAt(0)}</div>
                                     <div><p className="text-xs font-bold text-slate-700">{c.teacherName}</p></div>
                                 </div>
                             ) : (
@@ -267,13 +267,13 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                             )}
                         </td>
                         <td className="px-6 py-4 text-center">
-                            <span className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{c.isActive ? 'Active' : 'Paused'}</span>
+                            <span className={`px-3 py-1 rounded-sm text-[9px] font-black uppercase tracking-widest ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{c.isActive ? 'Active' : 'Paused'}</span>
                         </td>
                         <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                            <button onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); }} className="w-10 h-10 rounded-xl inline-flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Sửa tên lớp"><i className="fas fa-edit"></i></button>
-                            <button onClick={() => handleViewDetails(c)} className="w-10 h-10 rounded-xl inline-flex items-center justify-center bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all" title="Xem chi tiết lớp"><i className="fas fa-eye"></i></button>
-                            <button onClick={() => toggleClassActive(c.id, c.isActive)} className={`w-10 h-10 rounded-xl inline-flex items-center justify-center transition-all ${c.isActive ? 'bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`} title={c.isActive ? "Tạm dừng" : "Kích hoạt"}><i className={`fas ${c.isActive ? 'fa-pause' : 'fa-play'}`}></i></button>
-                            <button onClick={() => handleDeleteClass(c.id, c.name)} className="w-10 h-10 rounded-xl inline-flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition-all shadow-sm" title="Xóa lớp"><i className="fas fa-trash-alt"></i></button>
+                            <button onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); }} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Sửa tên lớp"><i className="fas fa-edit"></i></button>
+                            <button onClick={() => handleViewDetails(c)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all" title="Xem chi tiết lớp"><i className="fas fa-eye"></i></button>
+                            <button onClick={() => toggleClassActive(c.id, c.isActive)} className={`w-10 h-10 rounded-sm inline-flex items-center justify-center transition-all ${c.isActive ? 'bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`} title={c.isActive ? "Tạm dừng" : "Kích hoạt"}><i className={`fas ${c.isActive ? 'fa-pause' : 'fa-play'}`}></i></button>
+                            <button onClick={() => handleDeleteClass(c.id, c.name)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition-all shadow-sm" title="Xóa lớp"><i className="fas fa-trash-alt"></i></button>
                         </td>
                     </tr>
                 ))}
@@ -284,13 +284,13 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
       {/* CREATE CLASS MODAL */}
       {showCreateModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl animate-slide-up border-t-4 border-blue-600">
+          <div className="bg-white w-full max-w-md rounded-sm p-8 shadow-2xl animate-slide-up border-t-4 border-blue-600">
             <div className="mb-8"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Tạo Lớp học mới</h3></div>
             <div className="space-y-5">
-              <div className="space-y-1"><label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1">Tên Lớp</label><input required type="text" value={newClassName} onChange={e => setNewClassName(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all" autoFocus placeholder="K65-DTVT-01" /></div>
+              <div className="space-y-1"><label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1">Tên Lớp</label><input required type="text" value={newClassName} onChange={e => setNewClassName(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-sm outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all" autoFocus placeholder="K65-DTVT-01" /></div>
               <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
-                <button onClick={handleCreateClass} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Khởi tạo</button>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
+                <button onClick={handleCreateClass} className="flex-1 py-3 bg-blue-600 text-white rounded-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Khởi tạo</button>
               </div>
             </div>
           </div>
@@ -300,14 +300,14 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
       {/* ASSIGN TEACHER MODAL */}
       {showAssignModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl animate-slide-up border-t-4 border-blue-600">
+          <div className="bg-white w-full max-w-md rounded-sm p-8 shadow-2xl animate-slide-up border-t-4 border-blue-600">
             <div className="mb-8"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Phân công Giảng dạy</h3></div>
             <div className="space-y-5">
-              <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">1. Chọn Lớp</label><select title="Chọn lớp học" value={assignData.classId} onChange={e => setAssignData({...assignData, classId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all"><option value="">-- Chọn lớp --</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-              <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">2. Chọn Cán bộ quản lý</label><select title="Chọn cán bộ quản lý" value={assignData.teacherId} onChange={e => setAssignData({...assignData, teacherId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all"><option value="">-- Chọn Cán bộ quản lý --</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}</select></div>
+              <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">1. Chọn Lớp</label><select title="Chọn lớp học" value={assignData.classId} onChange={e => setAssignData({...assignData, classId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-sm outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all"><option value="">-- Chọn lớp --</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+              <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">2. Chọn Cán bộ quản lý</label><select title="Chọn cán bộ quản lý" value={assignData.teacherId} onChange={e => setAssignData({...assignData, teacherId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-sm outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all"><option value="">-- Chọn Cán bộ quản lý --</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}</select></div>
               <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
-                <button type="button" onClick={() => setShowAssignModal(false)} title="Hủy bỏ" className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
-                <button onClick={handleAssignTeacher} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Lưu phân công</button>
+                <button type="button" onClick={() => setShowAssignModal(false)} title="Hủy bỏ" className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
+                <button onClick={handleAssignTeacher} className="flex-1 py-3 bg-blue-600 text-white rounded-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Lưu phân công</button>
               </div>
             </div>
           </div>
@@ -317,14 +317,14 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
       {/* TASK 3: CLASS DETAILS MODAL */}
       {showDetailsModal && selectedClassDetails && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white w-full max-w-3xl rounded-2xl p-0 shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
+          <div className="bg-white w-full max-w-3xl rounded-sm p-0 shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
             {/* Header */}
-            <div className="p-8 border-b border-slate-100 bg-slate-50 rounded-2xl relative">
+            <div className="p-8 border-b border-slate-100 bg-slate-50 rounded-sm relative">
                 <button onClick={() => setShowDetailsModal(false)} className="absolute top-6 right-6 w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center transition-all"><i className="fas fa-times text-slate-500"></i></button>
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Chi tiết lớp {selectedClassDetails.name}</h3>
                 
-                <div className="mt-4 p-4 bg-white border border-slate-200 rounded-xl flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-sm">
+                <div className="mt-4 p-4 bg-white border border-slate-200 rounded-sm flex items-center gap-4">
+                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-sm flex items-center justify-center font-bold text-sm">
                         {selectedClassDetails.teacherName ? selectedClassDetails.teacherName.charAt(0) : '?'}
                     </div>
                     <div>
@@ -347,7 +347,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                         <span className="text-[10px] font-black uppercase tracking-widest">Đang tải dữ liệu...</span>
                     </div>
                 ) : classStudents.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 font-bold uppercase tracking-widest text-xs border-2 border-dashed border-slate-100 rounded-xl bg-slate-50">
+                    <div className="text-center py-12 text-slate-400 font-bold uppercase tracking-widest text-xs border-2 border-dashed border-slate-100 rounded-sm bg-slate-50">
                         Chưa có học viên nào trong lớp
                     </div>
                 ) : (
@@ -402,8 +402,8 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
             </div>
             
             {/* Footer */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end rounded-2xl">
-                <button onClick={() => setShowDetailsModal(false)} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg">Đóng</button>
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end rounded-sm">
+                <button onClick={() => setShowDetailsModal(false)} className="px-8 py-3 bg-blue-600 text-white rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg">Đóng</button>
             </div>
           </div>
         </div>, document.body

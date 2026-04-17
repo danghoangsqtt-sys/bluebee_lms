@@ -15,8 +15,8 @@ export const APPWRITE_CONFIG = {
     folders: import.meta.env.VITE_APPWRITE_COLLECTION_FOLDERS || 'folders',
     examResults: import.meta.env.VITE_APPWRITE_COLLECTION_EXAM_RESULTS || 'exam_results',
     schedules: import.meta.env.VITE_APPWRITE_COLLECTION_SCHEDULES || 'schedules',
-    notifications: 'notifications',
-    tasks: 'tasks',
+    notifications: import.meta.env.VITE_APPWRITE_COLLECTION_NOTIFICATIONS || 'notifications',
+    tasks: import.meta.env.VITE_APPWRITE_COLLECTION_TASKS || 'tasks',
   },
   buckets: {
     lectures: import.meta.env.VITE_APPWRITE_BUCKET_LECTURES,
