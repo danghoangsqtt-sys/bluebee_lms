@@ -1,12 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import TeacherManager from './TeacherManager';
 import ClassManager from './ClassManager';
 import StudentApproval from './StudentApproval';
 import OverviewTab from './OverviewTab';
 import MarqueeBanner from '../Common/MarqueeBanner';
-import { databases, APPWRITE_CONFIG, ID, Query } from '../../lib/appwrite';
 import './AdminDashboard.css';
 
 interface AdminDashboardProps {
@@ -17,12 +16,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify }) => {
   const location = useLocation();
 
   const NavItem = ({ to, label, icon }: { to: string, label: string, icon: string }) => {
-    const active = to === "" 
+    const active = to === "/admin"
       ? location.pathname === "/admin" || location.pathname === "/admin/"
-      : location.pathname.includes(`/admin/${to}`);
+      : location.pathname.startsWith(to);
     return (
-      <Link 
-        to={to} 
+      <Link
+        to={to}
         className={`flex items-center gap-3 px-6 py-3.5 rounded-sm font-black text-[10px] uppercase tracking-widest transition-all relative overflow-hidden group border ${
           active 
             ? 'bg-blue-900 text-white border-blue-800' 
@@ -78,10 +77,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify }) => {
 
       {/* Navigation Bar */}
       <div className="flex flex-wrap gap-2">
-          <NavItem to="" label="Tổng quan Hệ thống" icon="fa-tower-observation" />
-          <NavItem to="teachers" label="Quản lý Cán bộ quản lý" icon="fa-chalkboard-user" />
-          <NavItem to="classes" label="Quản lý Lớp học" icon="fa-school" />
-          <NavItem to="students" label="Phê duyệt Học viên" icon="fa-user-check" />
+          <NavItem to="/admin" label="Tổng quan Hệ thống" icon="fa-tower-observation" />
+          <NavItem to="/admin/teachers" label="Quản lý Cán bộ quản lý" icon="fa-chalkboard-user" />
+          <NavItem to="/admin/classes" label="Quản lý Lớp học" icon="fa-school" />
+          <NavItem to="/admin/students" label="Phê duyệt Học viên" icon="fa-user-check" />
       </div>
 
       {/* Content Area */}
