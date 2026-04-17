@@ -1,68 +1,142 @@
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { Question, QuestionType, KnowledgeDocument, AppSettings, UserProfile } from "../types";
+import { GenerateContentResponse, GoogleGenAI, Type } from "@google/genai";
+import { AppSettings, KnowledgeDocument, Question, UserProfile } from "../types";
 
-// --- CONFIGURATION ---
 const PRIMARY_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-2.0-flash";
-const FALLBACK_MODEL_2 = "gemini-1.5-flash"; // Third fallback for 429 rate limits
-const STORAGE_KEY_API = 'DTS_GEMINI_API_KEY';
+const SECONDARY_MODEL = "gemini-2.5-flash-lite";
+const TERTIARY_MODEL = "gemini-2.0-flash";
+const STORAGE_KEY_API = "DTS_GEMINI_API_KEY";
 
-const MAX_CONTEXT_CHARS = 1500000; // ~375K tokens — sufficient for full textbooks
+const MAX_CONTEXT_CHARS = 1500000;
+const MAX_EXAM_CONTEXT_CHARS = 240000;
 const MAX_HISTORY_LENGTH = 20;
+const AI_REQUEST_GAP_MS = 1800;
+const OVERLOAD_RETRY_LIMIT = 2;
+
+let lastAiRequestAt = 0;
+let aiRequestQueue: Promise<void> = Promise.resolve();
 
 const DEFAULT_SETTINGS: AppSettings = {
-  modelName: PRIMARY_MODEL, 
+  modelName: PRIMARY_MODEL,
   aiVoice: "Zephyr",
   temperature: 0.7,
   maxOutputTokens: 2048,
   autoSave: true,
-  ragTopK: 5, 
-  thinkingBudget: 0, 
-  systemExpertise: 'ACADEMIC'
+  ragTopK: 5,
+  thinkingBudget: 0,
+  systemExpertise: "ACADEMIC",
 };
 
 const getSettings = (): AppSettings => {
   try {
-    const saved = localStorage.getItem('app_settings');
+    const saved = localStorage.getItem("app_settings");
     return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
   } catch {
     return DEFAULT_SETTINGS;
   }
 };
 
-/**
- * Fix C-02: Thay process.env.API_KEY bằng import.meta.env.VITE_GEMINI_API_KEY
- * Priority: 1. User Custom Key → 2. VITE env var
- */
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const withAiRequestQueue = async <T>(task: () => Promise<T>): Promise<T> => {
+  const runTask = async (): Promise<T> => {
+    const waitTime = Math.max(0, AI_REQUEST_GAP_MS - (Date.now() - lastAiRequestAt));
+    if (waitTime > 0) {
+      await sleep(waitTime);
+    }
+
+    try {
+      return await task();
+    } finally {
+      lastAiRequestAt = Date.now();
+    }
+  };
+
+  const queuedTask = aiRequestQueue.catch(() => undefined).then(runTask);
+  aiRequestQueue = queuedTask.then(() => undefined, () => undefined);
+  return queuedTask;
+};
+
+const getSupportedModel = (modelName?: string): string => {
+  if (!modelName || modelName === "gemini-1.5-flash" || modelName === "gemini-3-flash-preview") {
+    return PRIMARY_MODEL;
+  }
+  return modelName;
+};
+
+const truncateContext = (contextText: string, maxChars: number): string => {
+  if (contextText.length <= maxChars) {
+    return contextText;
+  }
+
+  return `${contextText.substring(0, maxChars)}\n\n[...NOI DUNG DA BI CAT DE GIAM TAI REQUEST AI...]`;
+};
+
+const getRetryDelayMs = (error: unknown, attempt: number, kind: "quota" | "overload") => {
+  const rawMessage = String((error as any)?.message || error || "");
+  const retryAfterMatch = rawMessage.match(/retry after\s+(\d+)(?:\s*seconds?|\s*s)?/i);
+  if (retryAfterMatch) {
+    return Number(retryAfterMatch[1]) * 1000;
+  }
+
+  const baseDelay = kind === "overload" ? 3000 : 5000;
+  const maxDelay = kind === "overload" ? 12000 : 30000;
+  const exponentialDelay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+  const jitter = Math.floor(Math.random() * 700);
+  return exponentialDelay + jitter;
+};
+
+const getAiErrorMeta = (error: unknown) => {
+  const message = String((error as any)?.message || (error as any)?.toString?.() || "");
+  const status = Number((error as any)?.status || (error as any)?.code || 0);
+  const lowerMessage = message.toLowerCase();
+
+  return {
+    message,
+    isQuotaError:
+      status === 429 ||
+      lowerMessage.includes("429") ||
+      lowerMessage.includes("resource_exhausted") ||
+      lowerMessage.includes("rate limit") ||
+      lowerMessage.includes("quota"),
+    isServerOverload:
+      status === 503 ||
+      lowerMessage.includes("503") ||
+      lowerMessage.includes("overloaded") ||
+      lowerMessage.includes("service unavailable"),
+    isModelError:
+      status === 404 ||
+      (lowerMessage.includes("model") && lowerMessage.includes("not found")),
+  };
+};
+
 export const getDynamicApiKey = (): string | undefined => {
   const customKey = localStorage.getItem(STORAGE_KEY_API);
   if (customKey && customKey.trim().length > 0) {
     return customKey;
   }
-  // Fix C-02: Vite dùng import.meta.env, không phải process.env
+
   return import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
 };
 
 const getAI = (specificKey?: string) => {
   const apiKey = specificKey || getDynamicApiKey();
-  
+
   if (!apiKey) {
-    throw new Error("Vui lòng nhập Gemini API Key trong phần Cài đặt hệ thống (Settings) để sử dụng các tính năng AI.");
+    throw new Error("Vui long nhap Gemini API Key trong phan Cai dat he thong de su dung tinh nang AI.");
   }
-  
+
   return new GoogleGenAI({ apiKey });
 };
 
-/**
- * Validates an API Key by making a lightweight request.
- */
 export const validateApiKey = async (key: string): Promise<boolean> => {
   try {
     const ai = new GoogleGenAI({ apiKey: key });
-    await ai.models.generateContent({
-      model: PRIMARY_MODEL,
-      contents: "Hi",
-    });
+    await withAiRequestQueue(() =>
+      ai.models.generateContent({
+        model: SECONDARY_MODEL,
+        contents: "Hi",
+      })
+    );
     return true;
   } catch (error) {
     console.error("API Key Validation Failed:", error);
@@ -70,128 +144,119 @@ export const validateApiKey = async (key: string): Promise<boolean> => {
   }
 };
 
-/**
- * Fix M-01: SMART WRAPPER với fallback model thực sự.
- * Thứ tự: PRIMARY_MODEL → FALLBACK_MODEL → throw error
- */
 const generateWithFallback = async (
-  ai: GoogleGenAI, 
-  params: any, 
+  ai: GoogleGenAI,
+  params: any,
   retryCount = 4
-): Promise<{ response: GenerateContentResponse, usedModel: string }> => {
-  const modelsToTry = [params.model || PRIMARY_MODEL, FALLBACK_MODEL, FALLBACK_MODEL_2];
-  
+): Promise<{ response: GenerateContentResponse; usedModel: string }> => {
+  const preferredModel = getSupportedModel(params.model || getSettings().modelName || PRIMARY_MODEL);
+  const modelsToTry = Array.from(new Set([preferredModel, SECONDARY_MODEL, TERTIARY_MODEL]));
+
   for (const modelToUse of modelsToTry) {
     let attempt = 0;
     const currentConfig = params.config ? { ...params.config } : {};
 
     while (attempt < retryCount) {
       try {
-        const response = await ai.models.generateContent({
-          ...params,
-          model: modelToUse,
-          config: currentConfig
-        });
-        
-        if (modelToUse !== (params.model || PRIMARY_MODEL)) {
-          console.info(`[AI Fallback] Đang dùng model dự phòng: ${modelToUse}`);
-        }
-        return { response, usedModel: modelToUse };
+        const response = await withAiRequestQueue(() =>
+          ai.models.generateContent({
+            ...params,
+            model: modelToUse,
+            config: currentConfig,
+          })
+        );
 
-      } catch (error: any) {
-        const msg = error?.toString() || '';
-        const status = error?.status || 0;
-        const isQuotaError = msg.includes('429') || status === 429 || msg.includes('RESOURCE_EXHAUSTED');
-        const isServerOverload = msg.includes('503') || status === 503 || msg.includes('Overloaded');
-        const isModelError = msg.includes('model') && (msg.includes('not found') || status === 404);
+        if (modelToUse !== preferredModel) {
+          console.info(`[AI Fallback] Dang dung model du phong: ${modelToUse}`);
+        }
+
+        return { response, usedModel: modelToUse };
+      } catch (error) {
+        const { message, isQuotaError, isServerOverload, isModelError } = getAiErrorMeta(error);
 
         if (isModelError) {
-          // Model không tồn tại → thử model tiếp theo ngay
-          console.warn(`[AI Fallback] Model ${modelToUse} không tồn tại, thử model dự phòng...`);
+          console.warn(`[AI Fallback] Model ${modelToUse} khong ton tai, thu model tiep theo...`);
           break;
         }
 
         if (isServerOverload) {
-          // 503 Server Overloaded: thử 1 lần với delay ngắn trước khi đổi model
           attempt++;
-          if (attempt >= 2) {
-            console.warn(`[AI Fallback] ${modelToUse} vẫn overloaded, chuyển model dự phòng...`);
+          if (attempt >= OVERLOAD_RETRY_LIMIT) {
+            console.warn(`[AI Fallback] ${modelToUse} van overloaded, chuyen model du phong...`);
             break;
           }
-          console.warn(`[AI Overload] ${modelToUse} quá tải, chờ 3s...`);
-          await new Promise(r => setTimeout(r, 3000));
+
+          const delay = getRetryDelayMs(error, attempt, "overload");
+          console.warn(`[AI Overload] ${modelToUse} qua tai, cho ${delay}ms...`);
+          await sleep(delay);
           continue;
         }
 
         if (isQuotaError) {
           attempt++;
-          if (attempt >= retryCount) break; // Hết retry → thử model tiếp theo
+          if (attempt >= retryCount) {
+            break;
+          }
 
-          const delay = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s, 16s
-          console.warn(`[AI Retry] ${attempt}/${retryCount} - Chờ ${delay}ms...`);
-          await new Promise(r => setTimeout(r, delay));
+          const delay = getRetryDelayMs(error, attempt, "quota");
+          console.warn(`[AI Retry] ${attempt}/${retryCount} - Cho ${delay}ms...`);
+          await sleep(delay);
           continue;
         }
-        throw error; // Lỗi khác (auth, format...) → throw ngay
+
+        console.error(`[AI Error] ${modelToUse}:`, message);
+        throw error;
       }
     }
   }
-  
-  throw new Error("Lỗi kết nối AI. Vui lòng kiểm tra API Key và thử lại sau.");
+
+  throw new Error(
+    "Dich vu AI dang qua tai hoac vuot han muc key free. He thong da thu model du phong va retry nhieu lan nhung khong thanh cong."
+  );
 };
 
 const getSystemInstruction = (settings: AppSettings, contextText: string, user?: UserProfile | null) => {
-  const userName = user?.fullName || "Bạn";
+  const userName = user?.fullName || "Ban";
   const userRole = user?.role || "student";
 
   let roleInstruction = "";
 
-  if (userRole === 'teacher') {
+  if (userRole === "teacher") {
     roleInstruction = `
-    VAI TRÒ: Trợ lý AI chuyên nghiệp hỗ trợ Cán bộ quản lý ${userName}.
-    PHONG CÁCH: Chuyên nghiệp, đi thẳng vào chuyên môn.
-    NHIỆM VỤ: Soạn giáo án, đề xuất câu hỏi thi, tra cứu quy chuẩn.
-    `;
-  } else if (userRole === 'admin') {
+VAI TRO: Tro ly AI ho tro can bo quan ly ${userName}.
+PHONG CACH: Chuyen nghiep, di thang vao chuyen mon.
+NHIEM VU: Soan giao an, de xuat cau hoi thi, tra cuu quy chuan.
+`;
+  } else if (userRole === "admin") {
     roleInstruction = `
-    VAI TRÒ: System Bot (CLI Style).
-    PHONG CÁCH: Cực ngắn gọn. Chỉ báo cáo trạng thái hoặc kết quả.
-    `;
+VAI TRO: System Bot.
+PHONG CACH: Rat ngan gon. Chi bao cao trang thai va ket qua.
+`;
   } else {
     roleInstruction = `
-    VAI TRÒ: Thầy giáo AI (Socratic Tutor) hướng dẫn học viên ${userName}.
-    PHONG CÁCH: Thân thiện, khuyến khích tư duy.
-    `;
+VAI TRO: Thay giao AI huong dan hoc vien ${userName}.
+PHONG CACH: Than thien, khuyen khich tu duy.
+`;
   }
 
   let instruction = `${roleInstruction}
-  
-  CẤU TRÚC TRẢ LỜI & SỬ DỤNG CÔNG CỤ (QUAN TRỌNG):
-  1. **TRA CỨU GOOGLE (Ưu tiên):** 
-     - Sử dụng Google Search nếu cần thông tin thực tế bổ sung.
 
-  2. **Cấu trúc phản hồi:**
-     - Trả lời trực tiếp câu hỏi dựa trên nội dung tài liệu cung cấp (nếu có).
-     - Định dạng Markdown và LaTeX ($...$) cho công thức.
-  `;
+CAU TRUC TRA LOI VA SU DUNG CONG CU:
+1. Tra loi truc tiep dua tren noi dung tai lieu neu co.
+2. Dinh dang Markdown va LaTeX ($...$) cho cong thuc.
+`;
 
   if (contextText) {
-    // Fix M-03: Cắt context đúng giới hạn an toàn
-    const truncatedContext = contextText.length > MAX_CONTEXT_CHARS 
-      ? contextText.substring(0, MAX_CONTEXT_CHARS) + "\n\n[...NỘI DUNG ĐÃ BỊ CẮT DO QUÁ DÀI...]"
-      : contextText;
+    instruction += `\n[QUY TAC CUNG]:
+1. Tuyet doi chi dung thong tin trong tai lieu nay.
+2. Neu tai lieu khong du thong tin, hay noi ro "Tai lieu khong du thong tin".
 
-    instruction += `\n\n[QUY TẮC CỨNG]:
-1. TUYỆT ĐỐI chỉ dùng thông tin trong tài liệu này để thực hiện yêu cầu. Không bịa đặt.
-2. Nếu tài liệu không chứa đủ dữ liệu, hãy trả lời: "Tài liệu không đủ thông tin".
-
-[NỘI DUNG TÀI LIỆU]:\n${truncatedContext}`;
+[NOI DUNG TAI LIEU]:
+${truncateContext(contextText, MAX_CONTEXT_CHARS)}`;
   }
-  
+
   return instruction;
 };
-
-// --- EXPORTED FUNCTIONS ---
 
 export const generateChatResponse = async (
   history: { role: string; parts: { text: string }[] }[],
@@ -205,51 +270,47 @@ export const generateChatResponse = async (
     const settings = getSettings();
     let contextText = "";
     let sources: { uri: string; title: string }[] = [];
-    
-    // Context Stuffing Logic
+
     if (knowledgeDocs.length > 0) {
-        contextText = knowledgeDocs.map(doc => `--- DOCUMENT: ${doc.name} ---\n${doc.text}`).join("\n\n");
-        sources = knowledgeDocs.map(doc => ({ uri: '#', title: doc.name }));
+      contextText = knowledgeDocs.map(doc => `--- DOCUMENT: ${doc.name} ---\n${doc.text}`).join("\n\n");
+      sources = knowledgeDocs.map(doc => ({ uri: "#", title: doc.name }));
     }
 
-    // Fix C-03: Giới hạn history để tránh context overflow
     const trimmedHistory = history.slice(-MAX_HISTORY_LENGTH);
-
-    const targetModel = config?.model || PRIMARY_MODEL;
+    const targetModel = getSupportedModel(config?.model || settings.modelName || PRIMARY_MODEL);
     const tools = [{ googleSearch: {} }];
 
     const { response, usedModel } = await generateWithFallback(ai, {
       model: targetModel,
-      contents: [
-        ...trimmedHistory,
-        { role: 'user', parts: [{ text: message }] }
-      ],
+      contents: [...trimmedHistory, { role: "user", parts: [{ text: message }] }],
       config: {
         systemInstruction: getSystemInstruction(settings, contextText, user),
         temperature: config?.temperature || settings.temperature,
-        tools: tools 
+        maxOutputTokens: config?.maxOutputTokens || settings.maxOutputTokens,
+        tools,
       },
     });
 
-    const searchSources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
-      ?.filter((chunk: any) => chunk.web)
-      ?.map((chunk: any) => ({
-        uri: chunk.web.uri,
-        title: chunk.web.title
-      })) || [];
+    const searchSources =
+      response.candidates?.[0]?.groundingMetadata?.groundingChunks
+        ?.filter((chunk: any) => chunk.web)
+        ?.map((chunk: any) => ({
+          uri: chunk.web.uri,
+          title: chunk.web.title,
+        })) || [];
 
-    const allSources = [...sources, ...searchSources].filter((v,i,a)=>a.findIndex(t=>(t.uri === v.uri))===i);
+    const allSources = [...sources, ...searchSources].filter(
+      (value, index, array) => array.findIndex(item => item.uri === value.uri) === index
+    );
 
-    const finalText = response.text || "AI không thể tạo phản hồi.";
-    
     return {
-      text: finalText,
+      text: response.text || "AI khong the tao phan hoi.",
       sources: allSources,
-      modelUsed: usedModel
+      modelUsed: usedModel,
     };
   } catch (error: any) {
     console.error("AI Core Error:", error);
-    throw new Error(error.message || "Lỗi kết nối AI. Vui lòng kiểm tra API Key.");
+    throw new Error(error.message || "Loi ket noi AI. Vui long kiem tra API Key.");
   }
 };
 
@@ -261,25 +322,25 @@ export const generateQuestionsByAI = async (
 ): Promise<Partial<Question>[]> => {
   try {
     const ai = getAI();
-    
-    let finalPrompt = promptText;
+    const targetModel = getSupportedModel(getSettings().modelName || PRIMARY_MODEL);
+
+    let finalPrompt = `${promptText}
+
+So luong cau hoi can sinh: ${count}
+Muc do Bloom muc tieu: ${difficulty}`;
+
     if (contextText) {
-      // Fix M-03: Giới hạn context an toàn
-      const truncatedContext = contextText.length > MAX_CONTEXT_CHARS
-        ? contextText.substring(0, MAX_CONTEXT_CHARS) + "\n\n[...NỘI DUNG ĐÃ BỊ CẮT DO QUÁ DÀI...]"
-        : contextText;
-
       finalPrompt = `
-Bạn là một chuyên gia sư phạm. Tôi cung cấp cho bạn một tài liệu đầy đủ dưới đây.
-[QUY TẮC CỨNG]:
-1. TUYỆT ĐỐI chỉ dùng thông tin trong tài liệu này để thực hiện yêu cầu. Không bịa đặt.
-2. Nếu tài liệu không chứa đủ dữ liệu, hãy trả lời theo JSON rỗng [].
+Ban la mot chuyen gia su pham. Chi duoc dung thong tin trong tai lieu sau.
+[QUY TAC CUNG]:
+1. Khong duoc bia dat.
+2. Neu tai lieu khong du thong tin, tra ve JSON rong [].
 
-[NỘI DUNG TÀI LIỆU]:
-${truncatedContext}
+[NOI DUNG TAI LIEU]:
+${truncateContext(contextText, MAX_EXAM_CONTEXT_CHARS)}
 
-[YÊU CẦU CỦA NGƯỜI DÙNG]:
-${promptText}
+[YEU CAU]:
+${finalPrompt}
 `;
     }
 
@@ -294,93 +355,89 @@ ${promptText}
           correctAnswer: { type: Type.STRING },
           explanation: { type: Type.STRING },
           category: { type: Type.STRING },
-          bloomLevel: { type: Type.STRING }
+          bloomLevel: { type: Type.STRING },
         },
         required: ["content", "type", "correctAnswer", "explanation", "category", "bloomLevel"],
-        // options is intentionally omitted from required — ESSAY questions have none
       },
     };
 
     const { response } = await generateWithFallback(ai, {
-      model: PRIMARY_MODEL,
-      contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
+      model: targetModel,
+      contents: [{ role: "user", parts: [{ text: finalPrompt }] }],
       config: {
         responseMimeType: "application/json",
-        responseSchema: responseSchema,
+        responseSchema,
         temperature: 0.4,
       },
     });
-    
+
     const rawText = response.text || "";
+    if (!rawText) {
+      return [];
+    }
 
-    if (!rawText) return [];
+    const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    // SANITIZATION: Remove potential markdown wrapping
-    const cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
     try {
       const parsed = JSON.parse(cleanedText);
       return Array.isArray(parsed) ? parsed : [];
     } catch (parseError) {
       console.error("JSON Parse Error:", parseError, "Cleaned Text:", cleanedText.substring(0, 500));
-      throw new Error("Lỗi cấu trúc dữ liệu AI. Vui lòng thử lại.");
+      throw new Error("Loi cau truc du lieu AI. Vui long thu lai.");
     }
   } catch (error: any) {
     console.error("Question Gen Error:", error);
-    throw new Error(error.message || "Lỗi kết nối AI. Vui lòng kiểm tra API Key.");
+    throw new Error(error.message || "Loi ket noi AI. Vui long kiem tra API Key.");
   }
 };
 
-/**
- * Fix M-02: Sửa format `contents` thành array object chuẩn Gemini API
- */
 export const evaluateOralAnswer = async (
-    question: string,
-    correctAnswerOrContext: string,
-    userAnswer: string
+  question: string,
+  correctAnswerOrContext: string,
+  userAnswer: string
 ): Promise<{ score: number; feedback: string }> => {
-    try {
-      const ai = getAI();
-      
-      const evaluationPrompt = `Đánh giá câu trả lời môn học.
-Câu hỏi: ${question}
-Đáp án chuẩn: ${correctAnswerOrContext}
-Câu trả lời sinh viên: ${userAnswer}
+  try {
+    const ai = getAI();
+    const evaluationPrompt = `Danh gia cau tra loi mon hoc.
+Cau hoi: ${question}
+Dap an chuan: ${correctAnswerOrContext}
+Cau tra loi sinh vien: ${userAnswer}
 
-Hãy cho điểm từ 0-10 và nhận xét ngắn gọn bằng tiếng Việt.`;
+Hay cho diem tu 0-10 va nhan xet ngan gon bang tieng Viet.`;
 
-      const { response } = await generateWithFallback(ai, {
-          model: PRIMARY_MODEL,
-          // Fix M-02: contents phải là array of message objects, không phải string
-          contents: [{ role: 'user', parts: [{ text: evaluationPrompt }] }],
-          config: { 
-              responseMimeType: "application/json", 
-              temperature: 0.3,
-              responseSchema: {
-                  type: Type.OBJECT,
-                  properties: {
-                      score: { type: Type.NUMBER },
-                      feedback: { type: Type.STRING }
-                  },
-                  required: ["score", "feedback"]
-              }
-          }
-      });
+    const { response } = await generateWithFallback(ai, {
+      model: getSupportedModel(getSettings().modelName || PRIMARY_MODEL),
+      contents: [{ role: "user", parts: [{ text: evaluationPrompt }] }],
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.NUMBER },
+            feedback: { type: Type.STRING },
+          },
+          required: ["score", "feedback"],
+        },
+      },
+    });
 
-      const rawText = response.text || "";
-      if (!rawText) return { score: 0, feedback: "AI không thể đánh giá." };
-
-      const cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-      try {
-          return JSON.parse(cleanedText);
-      } catch (parseError) {
-          console.error("Evaluation Parse Error:", parseError);
-          return { score: 0, feedback: "Lỗi cấu trúc dữ liệu AI khi đánh giá." };
-      }
-    } catch (error: any) {
-      console.error("Evaluation Error:", error);
-      throw new Error(error.message || "Lỗi kết nối AI khi chấm điểm.");
+    const rawText = response.text || "";
+    if (!rawText) {
+      return { score: 0, feedback: "AI khong the danh gia." };
     }
+
+    const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    try {
+      return JSON.parse(cleanedText);
+    } catch (parseError) {
+      console.error("Evaluation Parse Error:", parseError);
+      return { score: 0, feedback: "Loi cau truc du lieu AI khi danh gia." };
+    }
+  } catch (error: any) {
+    console.error("Evaluation Error:", error);
+    throw new Error(error.message || "Loi ket noi AI khi cham diem.");
+  }
 };
 
 export const generateStudentPerformanceEvaluation = async (
@@ -392,32 +449,32 @@ export const generateStudentPerformanceEvaluation = async (
 ): Promise<string> => {
   try {
     const ai = getAI();
-    let wrongText = "Không có câu sai.";
-    if (wrongQuestionContents.length > 0) {
-      wrongText = wrongQuestionContents.map((q, i) => `${i + 1}. ${q}`).join('\n');
-    }
+    const wrongText =
+      wrongQuestionContents.length > 0
+        ? wrongQuestionContents.map((q, i) => `${i + 1}. ${q}`).join("\n")
+        : "Khong co cau sai.";
 
-    const prompt = `Đánh giá khách quan và ngắn gọn (1 đoạn khoảng 30-50 chữ) về bài kiểm tra của học sinh ${studentName}.
-Thông tin bài thi:
-- Điểm: ${score}/10
-- Thời gian làm bài: ${timeSpentStr}
-- Số lần cảnh báo gian lận (Tab switch/Mất kết nối): ${redFlags}
-- Các nội dung làm sai chính:
+    const prompt = `Danh gia khach quan va ngan gon (1 doan 30-50 chu) ve bai kiem tra cua hoc sinh ${studentName}.
+Thong tin bai thi:
+- Diem: ${score}/10
+- Thoi gian lam bai: ${timeSpentStr}
+- So lan canh bao gian lan: ${redFlags}
+- Cac noi dung lam sai chinh:
 ${wrongText}
 
-Hãy viết một nhận xét dành cho giáo viên, đánh giá thái độ (dựa vào redFlags), tốc độ làm bài và kiến thức bị hổng (dựa vào cấu sai). Không cần lời chào hỏi, đi thẳng vào đánh giá.`;
+Hay viet mot nhan xet danh cho giao vien, danh gia thai do, toc do lam bai va kien thuc bi hong.`;
 
     const { response } = await generateWithFallback(ai, {
-      model: PRIMARY_MODEL,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      model: getSupportedModel(getSettings().modelName || PRIMARY_MODEL),
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
-        temperature: 0.3, // Low temp for analytical evaluation
-      }
+        temperature: 0.3,
+      },
     });
 
-    return response.text || "AI không thể tạo nhận xét.";
+    return response.text || "AI khong the tao nhan xet.";
   } catch (error) {
     console.error("Gemini Evaluation Error:", error);
-    return "Không thể khởi tạo nhận xét, lỗi kết nối dịch vụ AI.";
+    return "Khong the khoi tao nhan xet vi loi ket noi dich vu AI.";
   }
 };

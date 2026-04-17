@@ -289,6 +289,7 @@ const Settings: React.FC<SettingsProps> = ({ onNotify }) => {
                         className="w-full p-4 bg-slate-50 border border-slate-300 font-bold text-blue-900 outline-none focus:border-blue-900 focus:ring-1 focus:ring-blue-900 rounded-sm text-sm"
                       >
                         <option value="gemini-2.5-flash">Gemini 2.5 Flash (Academic Standard)</option>
+                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Free Tier Friendly)</option>
                       </select>
                    </div>
 
