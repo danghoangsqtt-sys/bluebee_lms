@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { extractTextFromPDF } from '../../services/documentProcessor';
 import { generateQuestionsByAI } from '../../services/geminiService';
 import { Question, QuestionType, QuestionFolder } from '../../types';
+import { ID } from '../../lib/appwrite';
 import ReviewList from './ReviewList';
 
 interface AIGeneratorTabProps {
@@ -74,13 +75,6 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
         .map(([l, c]) => `${c} câu mức độ ${l}`)
         .join(', ');
 
-      // Fix H-01: Tách prompt và contextText hoàn toàn riêng biệt
-      // Không nhúng contextContent vào prompt string (gây mất context sau 15K chars)
-      if (!pdfFile && !customPrompt.trim()) {
-        setIsLoading(false);
-        return onNotify("Vui lòng tải tài liệu lên hoặc nhập nội dung gợi ý trước khi tạo câu hỏi!", "error");
-      }
-      
       // Prompt mô tả yêu cầu - không chứa context (context truyền riêng)
       const prompt = [
         customPrompt ? `Yêu cầu bổ sung: "${customPrompt}"` : '',
@@ -104,7 +98,7 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
       
       const processed = rawQuestions.map(q => ({
         ...q, 
-        id: Math.random().toString(36).substr(2, 9), 
+        id: ID.unique(),
         folderId: 'default',
         folder: targetFolder,
         createdAt: Date.now(),
@@ -113,9 +107,9 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
       
       onQuestionsGenerated(processed);
       onNotify("AI đã biên soạn đề thi thành công!", "success");
-    } catch (e) { 
-      onNotify("Lỗi xử lý AI. Vui lòng kiểm tra lại kết nối.", "error"); 
-    } finally { 
+    } catch (e: any) {
+      onNotify(e?.message || "Lỗi xử lý AI. Vui lòng kiểm tra lại kết nối.", "error");
+    } finally {
       setIsLoading(false); 
     }
   };

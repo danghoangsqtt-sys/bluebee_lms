@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Question, QuestionType, QuestionFolder } from '../../types';
+import { ID } from '../../lib/appwrite';
 import { formatContent } from '../../utils/textFormatter';
 import ReviewList from './ReviewList';
 
@@ -101,7 +102,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     const newQuestion: Question = {
       ...manualQ,
       correctAnswer: finalCorrectAnswer,
-      id: Math.random().toString(36).substr(2, 9),
+      id: ID.unique(),
       createdAt: Date.now(),
       options: manualQ.type === QuestionType.MULTIPLE_CHOICE ? manualQ.options : undefined,
       folderId: 'default'
@@ -252,7 +253,14 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                             <div className="text-xl font-bold text-slate-800 leading-relaxed border-l-4 border-blue-900 pl-4">
                                 {manualQ.content.trim() ? formatContent(manualQ.content) : "Waiting for input..."}
                             </div>
-                            {manualQ.image && <img src={manualQ.image} alt="Art" className="max-h-48 rounded-sm border border-slate-300 mx-auto" />}
+                            {manualQ.image && (
+                                <div className="relative inline-block w-full flex justify-center">
+                                    <img src={manualQ.image} alt="Art" className="max-h-48 rounded-sm border border-slate-300" />
+                                    <button type="button" onClick={handleRemoveImage} title="Xóa ảnh" className="absolute top-1 right-1 w-5 h-5 bg-red-600 text-white rounded-sm flex items-center justify-center hover:scale-110 transition-transform">
+                                        <i className="fas fa-times text-[10px]"></i>
+                                    </button>
+                                </div>
+                            )}
                             
                             {manualQ.type === QuestionType.MULTIPLE_CHOICE ? (
                                 <div className="space-y-2">

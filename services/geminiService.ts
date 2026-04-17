@@ -105,10 +105,22 @@ const generateWithFallback = async (
         const isServerOverload = msg.includes('503') || status === 503 || msg.includes('Overloaded');
         const isModelError = msg.includes('model') && (msg.includes('not found') || status === 404);
 
-        if (isModelError || isServerOverload) {
-          // Model không tồn tại hoặc Server 503 Overloaded → thử model tiếp theo ngay để giảm lag
-          console.warn(`[AI Fallback] Model ${modelToUse} không khả dụng/Overloaded, thử model dự phòng...`);
+        if (isModelError) {
+          // Model không tồn tại → thử model tiếp theo ngay
+          console.warn(`[AI Fallback] Model ${modelToUse} không tồn tại, thử model dự phòng...`);
           break;
+        }
+
+        if (isServerOverload) {
+          // 503 Server Overloaded: thử 1 lần với delay ngắn trước khi đổi model
+          attempt++;
+          if (attempt >= 2) {
+            console.warn(`[AI Fallback] ${modelToUse} vẫn overloaded, chuyển model dự phòng...`);
+            break;
+          }
+          console.warn(`[AI Overload] ${modelToUse} quá tải, chờ 3s...`);
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
         }
 
         if (isQuotaError) {
