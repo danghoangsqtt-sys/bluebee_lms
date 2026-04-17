@@ -29,6 +29,22 @@ export default function ExamControlDashboard({ exam, onClose, onConfigSave, tota
     const [examStatus, setExamStatus] = useState(exam.status || 'draft');
     const [targetClassId, setTargetClassId] = useState(exam.class_id || '');
     const [maxAttempts, setMaxAttempts] = useState(exam.max_attempts || 1);
+    const [duration, setDuration] = useState(exam.duration || 45);
+    const [classList, setClassList] = useState<any[]>([]);
+    const [configSaved, setConfigSaved] = useState(false);
+
+    useEffect(() => {
+        // Fetch classes for dropdown
+        const loadClasses = async () => {
+            try {
+                if (typeof databaseService.fetchClasses === 'function') {
+                    const cls = await databaseService.fetchClasses();
+                    setClassList(cls || []);
+                }
+            } catch (err) { console.warn('Không tải được danh sách lớp:', err); }
+        };
+        loadClasses();
+    }, []);
 
     useEffect(() => {
         const loadResults = async () => {
@@ -319,42 +335,146 @@ export default function ExamControlDashboard({ exam, onClose, onConfigSave, tota
                      )}
 
                      {activeMenu === 'config' && (
-                         <div className="max-w-2xl">
+                         <div>
                              <h2 className="text-xl font-black text-slate-700 uppercase tracking-widest mb-6"><i className="fas fa-cog mr-2"></i> Cài đặt Bài thi</h2>
-                             <div className="bg-white p-6 border border-slate-200 rounded-sm shadow-sm space-y-6">
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Giờ mở đề</label>
-                                        <input type="datetime-local" className="w-full border p-2 text-sm focus:border-blue-900" value={startTime} onChange={e => setStartTime(e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Giờ đóng đề</label>
-                                        <input type="datetime-local" className="w-full border p-2 text-sm focus:border-blue-900" value={endTime} onChange={e => setEndTime(e.target.value)} />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Mật khẩu thi</label>
-                                    <input type="text" placeholder="Để trống nếu tự do" className="w-full border p-2 text-sm focus:border-blue-900" value={examPassword} onChange={e => setExamPassword(e.target.value)} />
-                                </div>
-                                <div className="flex gap-6 border-y border-slate-100 py-4">
-                                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer">
-                                        <input type="checkbox" className="w-4 h-4 accent-blue-900" checked={shuffleQ} onChange={e => setShuffleQ(e.target.checked)}/> Đảo câu hỏi
-                                    </label>
-                                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer">
-                                        <input type="checkbox" className="w-4 h-4 accent-blue-900" checked={shuffleO} onChange={e => setShuffleO(e.target.checked)}/> Đảo đáp án
-                                    </label>
-                                </div>
-                                <div className="pt-2 flex justify-end gap-3">
-                                    <button onClick={() => {
-                                        onConfigSave({ 
-                                            start_time: startTime ? new Date(startTime).toISOString() : null, 
-                                            end_time: endTime ? new Date(endTime).toISOString() : null,
-                                            exam_password: examPassword, shuffle_questions: shuffleQ, shuffle_options: shuffleO
-                                        });
-                                    }} className="bg-blue-900 text-white px-6 py-2 rounded-sm text-xs font-black uppercase tracking-wider hover:bg-blue-800 transition-all shadow-sm">
-                                        Lưu cấu hình
-                                    </button>
-                                </div>
+                             <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+                                 {/* Section 1: Thời gian */}
+                                 <div className="p-6 space-y-5">
+                                     <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">
+                                         <i className="fas fa-clock text-blue-500"></i> Cấu hình thời gian
+                                     </div>
+                                     <div className="grid grid-cols-2 gap-6">
+                                         <div>
+                                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Thời gian Mở đề</label>
+                                             <input type="datetime-local" className="w-full border border-slate-300 p-2.5 text-sm rounded-sm focus:border-blue-900 focus:ring-2 focus:ring-blue-100 outline-none transition-all" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                                         </div>
+                                         <div>
+                                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Thời gian Đóng đề</label>
+                                             <input type="datetime-local" className="w-full border border-slate-300 p-2.5 text-sm rounded-sm focus:border-blue-900 focus:ring-2 focus:ring-blue-100 outline-none transition-all" value={endTime} onChange={e => setEndTime(e.target.value)} />
+                                         </div>
+                                     </div>
+                                 </div>
+
+                                 {/* Section 2: Bảo mật & Đảo */}
+                                 <div className="p-6 border-t border-slate-100 space-y-5">
+                                     <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">
+                                         <i className="fas fa-shield-alt text-green-500"></i> Bảo mật & Xáo trộn
+                                     </div>
+                                     <div>
+                                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Mật khẩu (Để trống nếu thi tự do)</label>
+                                         <input type="text" placeholder="Nhập mật khẩu..." className="w-full border border-slate-300 p-2.5 text-sm rounded-sm focus:border-blue-900 focus:ring-2 focus:ring-blue-100 outline-none transition-all" value={examPassword} onChange={e => setExamPassword(e.target.value)} />
+                                     </div>
+                                     <div className="flex gap-8">
+                                         <label className="flex items-center gap-2.5 text-sm font-bold text-slate-700 cursor-pointer select-none">
+                                             <input type="checkbox" className="w-4 h-4 accent-blue-900 rounded" checked={shuffleQ} onChange={e => setShuffleQ(e.target.checked)}/> Đảo câu hỏi
+                                         </label>
+                                         <label className="flex items-center gap-2.5 text-sm font-bold text-slate-700 cursor-pointer select-none">
+                                             <input type="checkbox" className="w-4 h-4 accent-blue-900 rounded" checked={shuffleO} onChange={e => setShuffleO(e.target.checked)}/> Đảo đáp án
+                                         </label>
+                                     </div>
+                                 </div>
+
+                                 {/* Section 3: Giao lớp & Giới hạn */}
+                                 <div className="p-6 border-t border-slate-100 space-y-5">
+                                     <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">
+                                         <i className="fas fa-users-cog text-purple-500"></i> Đối tượng & Giới hạn
+                                     </div>
+                                     <div>
+                                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Giao cho Lớp</label>
+                                         <select
+                                             className="w-full border border-slate-300 p-2.5 text-sm rounded-sm focus:border-blue-900 focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white"
+                                             value={targetClassId}
+                                             onChange={e => setTargetClassId(e.target.value)}
+                                         >
+                                             <option value="">— Tất cả (Thi tự do) —</option>
+                                             {classList.map((cls: any) => (
+                                                 <option key={cls.id || cls.$id} value={cls.id || cls.$id}>
+                                                     {cls.name || cls.className || cls.class_name || 'Lớp'}
+                                                 </option>
+                                             ))}
+                                         </select>
+                                     </div>
+                                     <div className="grid grid-cols-2 gap-6">
+                                         <div>
+                                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                                 <i className="fas fa-hourglass-half text-amber-500 mr-1"></i> Thời gian làm bài (phút)
+                                             </label>
+                                             <input
+                                                 type="number"
+                                                 min={1}
+                                                 max={600}
+                                                 className="w-full border border-slate-300 p-2.5 text-sm rounded-sm focus:border-blue-900 focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-amber-50 font-black text-blue-900"
+                                                 value={duration}
+                                                 onChange={e => setDuration(Math.max(1, parseInt(e.target.value) || 1))}
+                                             />
+                                         </div>
+                                         <div>
+                                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                                 Số lần thi tối đa
+                                             </label>
+                                             <input
+                                                 type="number"
+                                                 min={1}
+                                                 max={99}
+                                                 className="w-full border border-slate-300 p-2.5 text-sm rounded-sm focus:border-blue-900 focus:ring-2 focus:ring-blue-100 outline-none transition-all font-black text-blue-900"
+                                                 value={maxAttempts}
+                                                 onChange={e => setMaxAttempts(Math.max(1, parseInt(e.target.value) || 1))}
+                                             />
+                                         </div>
+                                     </div>
+                                 </div>
+
+                                 {/* Section 4: Trạng thái phát hành */}
+                                 <div className="p-6 border-t border-slate-100 space-y-4">
+                                     <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">
+                                         <i className="fas fa-toggle-on text-teal-500"></i> Trạng thái phát hành
+                                     </div>
+                                     <div className="flex gap-6">
+                                         <label className={`flex items-center gap-2.5 px-4 py-2.5 rounded-sm border cursor-pointer select-none transition-all ${
+                                             examStatus === 'draft' ? 'border-amber-400 bg-amber-50 text-amber-800 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                                         }`}>
+                                             <input type="radio" name="examStatus" value="draft" checked={examStatus === 'draft'} onChange={() => setExamStatus('draft')} className="accent-amber-600" />
+                                             <span className="text-sm font-bold"><i className="fas fa-pencil-alt mr-1.5"></i>Lưu nháp</span>
+                                         </label>
+                                         <label className={`flex items-center gap-2.5 px-4 py-2.5 rounded-sm border cursor-pointer select-none transition-all ${
+                                             examStatus === 'published' ? 'border-green-400 bg-green-50 text-green-800 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                                         }`}>
+                                             <input type="radio" name="examStatus" value="published" checked={examStatus === 'published'} onChange={() => setExamStatus('published')} className="accent-green-600" />
+                                             <span className="text-sm font-bold"><i className="fas fa-globe mr-1.5"></i>Xuất bản (Thi ngay / Theo giờ)</span>
+                                         </label>
+                                     </div>
+                                 </div>
+
+                                 {/* Save bar */}
+                                 <div className="p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                                     <div>
+                                         {configSaved && (
+                                             <span className="text-green-600 text-xs font-bold animate-pulse"><i className="fas fa-check-circle mr-1"></i>Đã lưu cấu hình thành công!</span>
+                                         )}
+                                     </div>
+                                     <div className="flex gap-3">
+                                         <button onClick={onClose} className="px-5 py-2.5 bg-white border border-slate-300 text-slate-600 rounded-sm text-xs font-bold uppercase tracking-wider hover:bg-slate-100 transition-all">
+                                             Hủy
+                                         </button>
+                                         <button onClick={() => {
+                                             onConfigSave({
+                                                 start_time: startTime ? new Date(startTime).toISOString() : null,
+                                                 end_time: endTime ? new Date(endTime).toISOString() : null,
+                                                 exam_password: examPassword,
+                                                 shuffle_questions: shuffleQ,
+                                                 shuffle_options: shuffleO,
+                                                 class_id: targetClassId || null,
+                                                 duration: duration,
+                                                 max_attempts: maxAttempts,
+                                                 status: examStatus
+                                             });
+                                             setConfigSaved(true);
+                                             setTimeout(() => setConfigSaved(false), 3000);
+                                         }} className="bg-blue-900 text-white px-6 py-2.5 rounded-sm text-xs font-black uppercase tracking-wider hover:bg-blue-800 transition-all shadow-sm flex items-center gap-2">
+                                             <i className="fas fa-save"></i> Lưu Cấu Hình
+                                         </button>
+                                     </div>
+                                 </div>
                              </div>
                          </div>
                      )}

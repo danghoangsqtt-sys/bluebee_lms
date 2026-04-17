@@ -86,7 +86,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify }) => {
       {/* Content Area */}
       <div className="bg-white rounded-sm border border-slate-300 min-h-[600px] relative">
         <Routes>
-          <Route path="/" element={<OverviewTab />} />
+          <Route index element={<OverviewTab />} />
           <Route path="teachers" element={<TeacherManager onNotify={onNotify} />} />
           <Route path="classes" element={<ClassManager onNotify={onNotify} />} />
           <Route path="students" element={<StudentApproval />} />
