@@ -3,6 +3,8 @@ import { databaseService, fetchExamResults, updateExamResultAI_Evaluation } from
 import client, { APPWRITE_CONFIG } from '../../lib/appwrite';
 import { generateStudentPerformanceEvaluation } from '../../services/geminiService';
 import { Exam } from '../../types';
+import ExamStatsOverview from './ExamStatsOverview';
+import ExamStatsWrongAnalysis from './ExamStatsWrongAnalysis';
 
 interface ExamControlDashboardProps {
     exam: Exam;
@@ -15,6 +17,7 @@ export default function ExamControlDashboard({ exam, onClose, onConfigSave, tota
     const [activeMenu, setActiveMenu] = useState<'config' | 'live' | 'stats_overview' | 'stats_scores' | 'stats_wrong'>('live');
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [examQuestions, setExamQuestions] = useState<any[]>([]);
     const [generatingAILoading, setGeneratingAILoading] = useState<Record<string, boolean>>({});
 
     // === CONFIG STATE ===
@@ -32,11 +35,37 @@ export default function ExamControlDashboard({ exam, onClose, onConfigSave, tota
             setLoading(true);
             try {
                 const data = await fetchExamResults(exam.id);
-                setResults(data);
+                // Enrich: ensure student_name is on the result root (from answers_data fallback)
+                const enriched = data.map((r: any) => {
+                    if (!r.student_name && r.answers_data) {
+                        try {
+                            const ad = JSON.parse(r.answers_data);
+                            if (ad.student_name) return { ...r, student_name: ad.student_name };
+                        } catch {}
+                    }
+                    return r;
+                });
+                setResults(enriched);
             } catch (err) { }
             finally { setLoading(false); }
         };
         loadResults();
+
+        // Load questions for the exam
+        const loadQuestions = async () => {
+            try {
+                const qIds = exam.questionIds || exam.question_ids || [];
+                if (qIds.length > 0) {
+                    const qs = await databaseService.fetchQuestionsByCriteria(qIds);
+                    // Maintain original order from exam
+                    const ordered = qIds.map((id: string) => qs.find((q: any) => q.id === id)).filter(Boolean);
+                    setExamQuestions(ordered.length > 0 ? ordered : qs);
+                }
+            } catch (err) {
+                console.warn('Không tải được câu hỏi gốc:', err);
+            }
+        };
+        loadQuestions();
 
         const unsubscribe = client.subscribe(
             `databases.${APPWRITE_CONFIG.dbId}.collections.${APPWRITE_CONFIG.collections.examResults}.documents`,
@@ -331,22 +360,11 @@ export default function ExamControlDashboard({ exam, onClose, onConfigSave, tota
                      )}
 
                      {activeMenu === 'stats_overview' && (
-                         <div className="flex items-center justify-center h-64 text-slate-400">
-                             <div>
-                                 <i className="fas fa-tools text-4xl mb-4 opacity-50 block text-center"></i>
-                                 <p className="font-bold text-sm uppercase tracking-widest text-center">Đang phát triển Tab Tổng Quan (Beta)</p>
-                                 <p className="text-center font-mono mt-1 text-xs">Vui lòng xem "Bảng điểm" trước.</p>
-                             </div>
-                         </div>
+                         <ExamStatsOverview results={results} examTitle={exam.title} />
                      )}
                      
                      {activeMenu === 'stats_wrong' && (
-                         <div className="flex items-center justify-center h-64 text-slate-400">
-                             <div>
-                                 <i className="fas fa-tools text-4xl mb-4 opacity-50 block text-center"></i>
-                                 <p className="font-bold text-sm uppercase tracking-widest text-center">Đang phát triển Tab Nội dung (Beta)</p>
-                             </div>
-                         </div>
+                         <ExamStatsWrongAnalysis results={results} questions={examQuestions} />
                      )}
                 </div>
             </div>

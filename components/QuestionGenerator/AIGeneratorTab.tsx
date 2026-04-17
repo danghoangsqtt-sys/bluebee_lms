@@ -153,7 +153,7 @@ const AIGeneratorTab: React.FC<AIGeneratorTabProps> = ({
           const normalizedType = normalizeType(question.type);
           return {
             ...question,
-            id: ID.unique(),
+            id: 'temp_' + ID.unique(),
             folderId: "default",
             folder: targetFolder,
             createdAt: Date.now() + generatedQuestions.length + questionIndex,

@@ -156,7 +156,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
     onQuestionCreated({
       ...manualQ,
       correctAnswer: finalCorrectAnswer,
-      id: ID.unique(),
+      id: 'temp_' + ID.unique(),
       createdAt: Date.now(),
       options: manualQ.type === QuestionType.MULTIPLE_CHOICE ? manualQ.options : undefined,
       optionImages: hasAnyOptionImage ? cleanOptionImages : undefined,
