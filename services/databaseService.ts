@@ -43,6 +43,7 @@ const mapDbQuestionToLocal = (db: any): Question => {
     creatorId: mapped.creator_id,
     createdAt: mapped.createdAt,
     options: meta.options || mapped.options || [],
+    optionImages: meta.optionImages || [],
     correctAnswer: meta.correctAnswer || mapped.correct_answer,
     explanation: meta.explanation || mapped.explanation,
     bloomLevel: meta.bloomLevel || mapped.bloom_level,
@@ -59,6 +60,7 @@ const mapLocalQuestionToDb = (q: Question, userId: string): any => {
 
   const metaObject = {
     options: q.options || [],
+    optionImages: q.optionImages || [],
     correctAnswer: q.correctAnswer,
     explanation: q.explanation,
     bloomLevel: q.bloomLevel,

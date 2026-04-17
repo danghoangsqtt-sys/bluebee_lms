@@ -137,7 +137,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
   };
 
   return (
-    <div className="bg-white border border-slate-300 max-w-[1600px] mx-auto flex h-[calc(100vh-180px)] min-h-[700px] overflow-hidden rounded-sm shadow-none">
+    <div className="bg-white border border-slate-300 max-w-[1600px] mx-auto flex h-[calc(100vh-140px)] overflow-hidden rounded-sm shadow-none">
       <aside className="w-64 bg-slate-900 border-r border-slate-700 flex flex-col shrink-0 p-6">
         <div className="mb-8 p-4 border-b border-white/10">
             <h2 className="text-xl font-black text-white uppercase tracking-widest leading-none">Studio</h2>
@@ -169,7 +169,7 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 bg-slate-50">
-        <div className="flex-1 p-6 overflow-hidden">
+        <div className="flex-1 overflow-hidden">
             {activeTab === 'AI' ? (
                 <AIGeneratorTab 
                     folders={folders} 

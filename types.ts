@@ -233,6 +233,8 @@ export interface Question {
   folder?: string; // NEW: Text-based folder name stored in metadata
   image?: string;
 
+  optionImages?: string[]; // Per-option images (parallel to options[])
+
   // Temporary fields for Upload Logic
   imageFile?: File;
   previewUrl?: string;
