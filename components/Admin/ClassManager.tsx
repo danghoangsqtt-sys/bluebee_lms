@@ -20,7 +20,8 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
-  
+  const [assignLockedClass, setAssignLockedClass] = useState(false);
+
   const [newClassName, setNewClassName] = useState('');
   const [assignData, setAssignData] = useState({ classId: '', teacherId: '' });
 
@@ -111,6 +112,17 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
     }
   };
 
+  const handleOpenAssignModal = (classItem?: ClassWithTeacher) => {
+    if (classItem) {
+      setAssignData({ classId: classItem.id, teacherId: classItem.teacherId && classItem.teacherId !== 'unassigned' ? classItem.teacherId : '' });
+      setAssignLockedClass(true);
+    } else {
+      setAssignData({ classId: '', teacherId: '' });
+      setAssignLockedClass(false);
+    }
+    setShowAssignModal(true);
+  };
+
   const handleAssignTeacher = async () => {
       if (!assignData.classId || !assignData.teacherId) {
           onNotify("Vui lòng chọn đầy đủ Lớp và Cán bộ quản lý", "warning");
@@ -128,10 +140,27 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
           onNotify("Phân công Cán bộ quản lý thành công!", "success");
           setShowAssignModal(false);
           setAssignData({ classId: '', teacherId: '' });
+          setAssignLockedClass(false);
           fetchData();
       } catch (err: any) {
           onNotify(err.message, "error");
       }
+  };
+
+  const handleUnassignTeacher = async (classId: string, className: string) => {
+    if (!window.confirm(`Xác nhận gỡ phân công cán bộ khỏi lớp "${className}"?`)) return;
+    try {
+      await databases.updateDocument(
+        APPWRITE_CONFIG.dbId,
+        APPWRITE_CONFIG.collections.classes,
+        classId,
+        { teacher_id: 'unassigned' }
+      );
+      onNotify("Đã gỡ phân công cán bộ khỏi lớp.", "info");
+      setClasses(prev => prev.map(c => c.id === classId ? { ...c, teacherId: 'unassigned', teacherName: 'Chưa gán', teacherEmail: '' } : c));
+    } catch (err: any) {
+      onNotify(err.message, "error");
+    }
   };
 
   const toggleClassActive = async (id: string, current: boolean) => {
@@ -219,7 +248,7 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 ml-8">Cấu trúc tổ chức đào tạo</p>
         </div>
         <div className="flex gap-3">
-            <button onClick={() => setShowAssignModal(true)} title="Phân công giảng dạy" className="bg-slate-100 text-slate-600 border border-slate-200 px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"><i className="fas fa-user-tag"></i> Phân công</button>
+            <button onClick={() => handleOpenAssignModal()} title="Phân công giảng dạy" className="bg-slate-100 text-slate-600 border border-slate-200 px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"><i className="fas fa-user-tag"></i> Phân công</button>
             <button onClick={() => setShowCreateModal(true)} title="Tạo lớp học mới" className="bg-blue-600 text-white px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95"><i className="fas fa-plus"></i> Khởi tạo Lớp</button>
         </div>
       </div>
@@ -269,11 +298,18 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
                         <td className="px-6 py-4 text-center">
                             <span className={`px-3 py-1 rounded-sm text-[9px] font-black uppercase tracking-widest ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{c.isActive ? 'Active' : 'Paused'}</span>
                         </td>
-                        <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                            <button onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); }} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Sửa tên lớp"><i className="fas fa-edit"></i></button>
-                            <button onClick={() => handleViewDetails(c)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all" title="Xem chi tiết lớp"><i className="fas fa-eye"></i></button>
-                            <button onClick={() => toggleClassActive(c.id, c.isActive)} className={`w-10 h-10 rounded-sm inline-flex items-center justify-center transition-all ${c.isActive ? 'bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`} title={c.isActive ? "Tạm dừng" : "Kích hoạt"}><i className={`fas ${c.isActive ? 'fa-pause' : 'fa-play'}`}></i></button>
-                            <button onClick={() => handleDeleteClass(c.id, c.name)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition-all shadow-sm" title="Xóa lớp"><i className="fas fa-trash-alt"></i></button>
+                        <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                                <button type="button" onClick={() => { setEditingClassId(c.id); setEditingClassName(c.name); }} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Sửa tên lớp"><i className="fas fa-edit"></i></button>
+                                {(c.teacherId && c.teacherId !== 'unassigned') ? (
+                                  <button type="button" onClick={() => handleUnassignTeacher(c.id, c.name)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white transition-all shadow-sm" title="Gỡ phân công cán bộ"><i className="fas fa-user-slash"></i></button>
+                                ) : (
+                                  <button type="button" onClick={() => handleOpenAssignModal(c)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-green-50 text-green-600 hover:bg-green-600 hover:text-white transition-all shadow-sm" title="Phân công cán bộ quản lý"><i className="fas fa-user-tag"></i></button>
+                                )}
+                                <button type="button" onClick={() => handleViewDetails(c)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all" title="Xem chi tiết lớp"><i className="fas fa-eye"></i></button>
+                                <button type="button" onClick={() => toggleClassActive(c.id, c.isActive)} className={`w-10 h-10 rounded-sm inline-flex items-center justify-center transition-all ${c.isActive ? 'bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`} title={c.isActive ? "Tạm dừng" : "Kích hoạt"}><i className={`fas ${c.isActive ? 'fa-pause' : 'fa-play'}`}></i></button>
+                                <button type="button" onClick={() => handleDeleteClass(c.id, c.name)} className="w-10 h-10 rounded-sm inline-flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition-all shadow-sm" title="Xóa lớp"><i className="fas fa-trash-alt"></i></button>
+                            </div>
                         </td>
                     </tr>
                 ))}
@@ -301,13 +337,37 @@ const ClassManager: React.FC<ClassManagerProps> = ({ onNotify }) => {
       {showAssignModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-white w-full max-w-md rounded-sm p-8 shadow-2xl animate-slide-up border-t-4 border-blue-600">
-            <div className="mb-8"><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Phân công Giảng dạy</h3></div>
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Phân công Cán bộ</h3>
+                {assignLockedClass && assignData.classId && (
+                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1 flex items-center gap-1">
+                    <i className="fas fa-school"></i> {classes.find(c => c.id === assignData.classId)?.name}
+                  </p>
+                )}
+              </div>
+              <button type="button" title="Đóng" onClick={() => { setShowAssignModal(false); setAssignLockedClass(false); }} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-all"><i className="fas fa-times"></i></button>
+            </div>
             <div className="space-y-5">
-              <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">1. Chọn Lớp</label><select title="Chọn lớp học" value={assignData.classId} onChange={e => setAssignData({...assignData, classId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-sm outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all"><option value="">-- Chọn lớp --</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-              <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">2. Chọn Cán bộ quản lý</label><select title="Chọn cán bộ quản lý" value={assignData.teacherId} onChange={e => setAssignData({...assignData, teacherId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-sm outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all"><option value="">-- Chọn Cán bộ quản lý --</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}</select></div>
-              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
-                <button type="button" onClick={() => setShowAssignModal(false)} title="Hủy bỏ" className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
-                <button onClick={handleAssignTeacher} className="flex-1 py-3 bg-blue-600 text-white rounded-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Lưu phân công</button>
+              {!assignLockedClass && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">1. Chọn Lớp</label>
+                  <select title="Chọn lớp học" value={assignData.classId} onChange={e => setAssignData({...assignData, classId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-sm outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all">
+                    <option value="">-- Chọn lớp --</option>
+                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.teacherName && c.teacherId !== 'unassigned' ? ` (${c.teacherName})` : ' — Chưa phân công'}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{assignLockedClass ? '1.' : '2.'} Chọn Cán bộ quản lý</label>
+                <select title="Chọn cán bộ quản lý" value={assignData.teacherId} onChange={e => setAssignData({...assignData, teacherId: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-sm outline-none focus:border-blue-600 focus:bg-white font-bold text-sm text-slate-800 transition-all">
+                  <option value="">-- Chọn Cán bộ quản lý --</option>
+                  {teachers.map(t => <option key={t.id} value={t.id}>{t.fullName} — {t.email}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => { setShowAssignModal(false); setAssignLockedClass(false); }} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Hủy</button>
+                <button type="button" onClick={handleAssignTeacher} className="flex-1 py-3 bg-blue-600 text-white rounded-sm font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Lưu phân công</button>
               </div>
             </div>
           </div>
