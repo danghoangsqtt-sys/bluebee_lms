@@ -44,6 +44,11 @@ export default function OnlineTestManager({ user }: { user: any }) {
     const [adminSelectedCreator, setAdminSelectedCreator] = useState<string>('ALL');
     const [userProfiles, setUserProfiles] = useState<Record<string, string>>({});
 
+    // Bộ lọc nâng cao
+    const [searchText, setSearchText] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'published' | 'draft'>('ALL');
+    const [folderFilter, setFolderFilter] = useState<string>('ALL');
+
     useEffect(() => {
         const fetchData = async () => {
             if (!user) return;
@@ -156,10 +161,23 @@ export default function OnlineTestManager({ user }: { user: any }) {
     }, [exams, userProfiles, user?.role]);
 
     // Danh sách đề thi đã được lọc theo sidebar
+    const examFolders = useMemo(() => {
+        const set = new Set<string>(['ALL']);
+        exams.forEach(e => { if (e.folder) set.add(e.folder); });
+        return Array.from(set).sort((a, b) => a === 'ALL' ? -1 : a.localeCompare(b, 'vi'));
+    }, [exams]);
+
     const displayedExams = useMemo(() => {
-        if (user?.role !== 'admin' || adminSelectedCreator === 'ALL') return exams;
-        return exams.filter(e => e.creatorId === adminSelectedCreator || e.creator_id === adminSelectedCreator);
-    }, [exams, adminSelectedCreator, user?.role]);
+        return exams.filter(e => {
+            const matchCreator = user?.role !== 'admin' || adminSelectedCreator === 'ALL'
+                || e.creatorId === adminSelectedCreator || e.creator_id === adminSelectedCreator;
+            const matchSearch = !searchText.trim()
+                || (e.title || '').toLowerCase().includes(searchText.toLowerCase());
+            const matchStatus = statusFilter === 'ALL' || e.status === statusFilter;
+            const matchFolder = folderFilter === 'ALL' || (e.folder || 'Mặc định') === folderFilter;
+            return matchCreator && matchSearch && matchStatus && matchFolder;
+        });
+    }, [exams, adminSelectedCreator, user?.role, searchText, statusFilter, folderFilter]);
 
     const getExamTotalQuestions = (exam: any): number => {
         if (!exam) return 0;
@@ -382,6 +400,58 @@ export default function OnlineTestManager({ user }: { user: any }) {
 
                 {/* Danh sách đề thi */}
                 <div className="flex-1">
+                    {/* Filter Bar */}
+                    <div className="bg-white border border-slate-300 rounded-sm p-3 mb-4 flex flex-wrap gap-2 items-center">
+                        {/* Tìm kiếm */}
+                        <div className="relative flex-1 min-w-[180px]">
+                            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                            <input
+                                type="text"
+                                placeholder="Tìm kiếm đề thi..."
+                                value={searchText}
+                                onChange={e => setSearchText(e.target.value)}
+                                title="Tìm kiếm theo tên đề thi"
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-sm text-xs font-bold text-slate-700 outline-none focus:border-blue-900"
+                            />
+                        </div>
+                        {/* Lọc trạng thái */}
+                        <div className="flex gap-1 bg-slate-50 p-0.5 rounded-sm border border-slate-300">
+                            {(['ALL', 'published', 'draft'] as const).map(s => (
+                                <button type="button" key={s} onClick={() => setStatusFilter(s)}
+                                    className={`px-3 py-1.5 rounded-sm text-[9px] font-black uppercase tracking-wider transition-all ${statusFilter === s ? 'bg-blue-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    {s === 'ALL' ? 'Tất cả' : s === 'published' ? '● Đã xuất bản' : '○ Bản nháp'}
+                                </button>
+                            ))}
+                        </div>
+                        {/* Lọc thư mục */}
+                        {examFolders.length > 1 && (
+                            <div className="relative flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-sm px-2">
+                                <i className="fas fa-folder text-slate-400 text-[10px]"></i>
+                                <select
+                                    value={folderFilter}
+                                    onChange={e => setFolderFilter(e.target.value)}
+                                    title="Lọc theo thư mục đề thi"
+                                    className="appearance-none bg-transparent py-2 pl-1 pr-6 text-[9px] font-black uppercase text-slate-600 outline-none cursor-pointer"
+                                >
+                                    {examFolders.map(f => (
+                                        <option key={f} value={f}>{f === 'ALL' ? 'Tất cả thư mục' : f}</option>
+                                    ))}
+                                </select>
+                                <i className="fas fa-chevron-down text-[8px] text-slate-400 absolute right-2 pointer-events-none"></i>
+                            </div>
+                        )}
+                        {/* Reset */}
+                        {(searchText || statusFilter !== 'ALL' || folderFilter !== 'ALL') && (
+                            <button type="button" onClick={() => { setSearchText(''); setStatusFilter('ALL'); setFolderFilter('ALL'); }}
+                                title="Xóa bộ lọc"
+                                className="px-3 py-2 bg-slate-100 text-slate-500 text-[9px] font-black uppercase rounded-sm hover:bg-red-50 hover:text-red-600 border border-slate-300 transition-all"
+                            >
+                                <i className="fas fa-times mr-1"></i> Xóa lọc
+                            </button>
+                        )}
+                    </div>
+
                     {loading ? (
                         <div className="flex-1 flex items-center justify-center py-20">
                             <div className="text-center">

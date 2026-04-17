@@ -30,7 +30,23 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
   const [dbQuestions, setDbQuestions] = useState<Question[]>([]);
   const [dbExams, setDbExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
-  
+
+  // --- BỘ LỌC NÂNG CAO ---
+  type SortOption = 'newest' | 'oldest' | 'type' | 'bloom' | 'alpha';
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [bloomFilter, setBloomFilter] = useState<string>('ALL');
+
+  const BLOOM_LEVELS_LIST = ['Nhận biết', 'Thông hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
+  const BLOOM_ORDER: Record<string, number> = { 'Nhận biết': 1, 'Thông hiểu': 2, 'Vận dụng': 3, 'Phân tích': 4, 'Đánh giá': 5, 'Sáng tạo': 6 };
+  const BLOOM_CONFIG: Record<string, { active: string; inactive: string; dot: string }> = {
+    'Nhận biết':  { active: 'bg-blue-600 text-white border-blue-600',    inactive: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100',    dot: 'bg-blue-500' },
+    'Thông hiểu': { active: 'bg-teal-600 text-white border-teal-600',    inactive: 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100',    dot: 'bg-teal-500' },
+    'Vận dụng':   { active: 'bg-green-600 text-white border-green-600',  inactive: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100',  dot: 'bg-green-500' },
+    'Phân tích':  { active: 'bg-amber-600 text-white border-amber-600',  inactive: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',  dot: 'bg-amber-500' },
+    'Đánh giá':   { active: 'bg-orange-600 text-white border-orange-600',inactive: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100',dot: 'bg-orange-500' },
+    'Sáng tạo':   { active: 'bg-purple-600 text-white border-purple-600',inactive: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100',dot: 'bg-purple-500' },
+  };
+
   const [selectedFolder, setSelectedFolder] = useState<string>('ALL');
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   
@@ -218,7 +234,22 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
       return ['ALL', ...Array.from(allFolders).sort()];
   }, [dbQuestions, customFolders]);
 
-  const displayQuestions = dbQuestions;
+  const displayQuestions = useMemo(() => {
+    const getContent = (q: Question) => typeof q.content === 'string' ? q.content : (q.content as any)?.content || '';
+    const filtered = dbQuestions.filter(q =>
+        bloomFilter === 'ALL' || q.bloomLevel === bloomFilter
+    );
+    return [...filtered].sort((a, b) => {
+        switch (sortBy) {
+            case 'oldest': return (a.createdAt || 0) - (b.createdAt || 0);
+            case 'newest': return (b.createdAt || 0) - (a.createdAt || 0);
+            case 'type':   return (a.type || '').localeCompare(b.type || '');
+            case 'bloom':  return (BLOOM_ORDER[a.bloomLevel || ''] || 99) - (BLOOM_ORDER[b.bloomLevel || ''] || 99);
+            case 'alpha':  return getContent(a).localeCompare(getContent(b), 'vi');
+            default:       return 0;
+        }
+    });
+  }, [dbQuestions, bloomFilter, sortBy]);
 
   // --- Exam Folder Logic ---
   const uniqueExamFolders = useMemo(() => {
@@ -596,13 +627,54 @@ const QuestionBankManager: React.FC<QuestionBankManagerProps> = ({
                 ) : (
                     <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full">
                         {managerTab === 'QUESTIONS' && (
+                            <>
+                            {/* Lọc theo loại câu hỏi */}
                             <div className="flex gap-1 bg-white p-0.5 rounded-sm border border-slate-300">
-                                {['ALL', QuestionType.MULTIPLE_CHOICE, QuestionType.ESSAY].map(type => (
+                                {(['ALL', QuestionType.MULTIPLE_CHOICE, QuestionType.ESSAY] as const).map(type => (
                                     <button key={type} onClick={() => setActiveTab(type as any)} className={`px-4 py-2 rounded-sm text-[9px] font-black uppercase transition-all ${activeTab === type ? 'bg-blue-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
                                         {type === 'ALL' ? 'Tất cả' : type === QuestionType.MULTIPLE_CHOICE ? 'TN' : 'TL'}
                                     </button>
                                 ))}
                             </div>
+
+                            {/* Lọc theo mức độ Bloom */}
+                            <div className="flex gap-1 bg-white p-0.5 rounded-sm border border-slate-300">
+                                <button
+                                    onClick={() => setBloomFilter('ALL')}
+                                    className={`px-3 py-2 rounded-sm text-[9px] font-black uppercase transition-all border ${bloomFilter === 'ALL' ? 'bg-blue-900 text-white border-blue-900' : 'bg-slate-50 text-slate-500 border-transparent hover:bg-slate-100'}`}
+                                >Mọi mức</button>
+                                {BLOOM_LEVELS_LIST.map(level => {
+                                    const cfg = BLOOM_CONFIG[level];
+                                    const isActive = bloomFilter === level;
+                                    return (
+                                        <button key={level} onClick={() => setBloomFilter(level)}
+                                            className={`px-2.5 py-2 rounded-sm text-[9px] font-black uppercase transition-all flex items-center gap-1 border ${isActive ? cfg.active : cfg.inactive}`}
+                                        >
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : cfg.dot}`}></span>
+                                            {level}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Sắp xếp */}
+                            <div className="relative flex items-center gap-1 bg-white p-0.5 pl-3 rounded-sm border border-slate-300">
+                                <i className="fas fa-sort text-slate-400 text-[10px]"></i>
+                                <select
+                                    value={sortBy}
+                                    onChange={e => setSortBy(e.target.value as SortOption)}
+                                    title="Sắp xếp câu hỏi"
+                                    className="appearance-none bg-transparent pr-6 pl-1 py-2 text-[9px] font-black uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
+                                >
+                                    <option value="newest">Mới nhất</option>
+                                    <option value="oldest">Cũ nhất</option>
+                                    <option value="type">Theo loại</option>
+                                    <option value="bloom">Theo Bloom</option>
+                                    <option value="alpha">A → Z</option>
+                                </select>
+                                <i className="fas fa-chevron-down text-[8px] text-slate-400 absolute right-2 pointer-events-none"></i>
+                            </div>
+                            </>
                         )}
                         {managerTab === 'EXAMS' && (
                             <button onClick={() => setIsCreatingExam(true)} className="bg-yellow-500 text-blue-900 px-6 py-3 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-yellow-400 transition-all border border-yellow-600 flex items-center gap-2">

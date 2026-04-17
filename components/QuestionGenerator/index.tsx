@@ -34,8 +34,9 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
       const loadAllFolders = async () => {
           if (!user?.id) return;
           try {
-              const [metadata, eFolders, examsRes] = await Promise.all([
-                  databaseService.fetchQuestionMetadataForMatrix(),
+              const [metadata, qFolders, eFolders, examsRes] = await Promise.all([
+                  databaseService.fetchQuestionMetadataForMatrix().catch(() => [] as any[]),
+                  fetchCustomFolders('question').catch(() => [] as string[]),
                   fetchCustomFolders('exam').catch(() => [] as string[]),
                   databases.listDocuments(
                       APPWRITE_CONFIG.dbId,
@@ -44,11 +45,12 @@ const QuestionGenerator: React.FC<QuestionGeneratorProps> = ({ folders, onSaveQu
                   ).catch(() => ({ documents: [] }))
               ]);
 
-              // 1. Thư mục câu hỏi
-              const questionFolderSet = new Set(metadata.map((m: any) => m.folder || 'Mặc định'));
+              // 1. Thư mục câu hỏi: custom question folders + từ metadata questions
+              const questionFolderSet = new Set<string>(['Mặc định', ...qFolders]);
+              metadata.forEach((m: any) => { if (m.folder) questionFolderSet.add(m.folder); });
               setAvailableFolders(Array.from(questionFolderSet).sort());
 
-              // 2. Thư mục đề thi: custom folders + từ config các đề thi đã tồn tại
+              // 2. Thư mục đề thi: custom exam folders + từ config các đề thi đã tồn tại
               const examFolderSet = new Set<string>(['Mặc định', ...eFolders]);
               (examsRes as any).documents.forEach((doc: any) => {
                   try {
