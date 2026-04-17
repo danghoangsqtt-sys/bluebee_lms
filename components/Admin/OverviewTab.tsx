@@ -37,9 +37,15 @@ const OverviewTab: React.FC = () => {
   const [taskTargetType, setTaskTargetType] = useState('all');
   const [taskTargetId, setTaskTargetId] = useState('');
 
+  // --- THÔNG BÁO STATE ---
+  const [currentNotification, setCurrentNotification] = useState('');
+  const [newNotification, setNewNotification] = useState('');
+  const [isSavingNotification, setIsSavingNotification] = useState(false);
+
   useEffect(() => {
     fetchSchedules();
     fetchTasks();
+    fetchNotification();
   }, []);
 
   const fetchSchedules = async () => {
@@ -177,6 +183,45 @@ const OverviewTab: React.FC = () => {
     }
   };
 
+  const fetchNotification = async () => {
+    try {
+        const response = await databases.listDocuments(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.notifications,
+            [Query.orderDesc('$createdAt'), Query.limit(1)]
+        );
+        if (response.documents.length > 0) {
+            const doc = response.documents[0];
+            const text = doc.message || doc.content || '';
+            setCurrentNotification(text);
+            setNewNotification(text);
+        } else {
+            setCurrentNotification('CHÀO MỪNG QUÝ ĐỒNG CHÍ ĐẾN VỚI HỆ THỐNG HỌC TẬP - HIỆU QUẢ, LINH HOẠT, BẢO MẬT.');
+        }
+    } catch (error) {
+        console.error('Error fetching notification:', error);
+    }
+  };
+
+  const saveNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNotification.trim()) return;
+    setIsSavingNotification(true);
+    try {
+        await databases.createDocument(
+            APPWRITE_CONFIG.dbId,
+            APPWRITE_CONFIG.collections.notifications,
+            ID.unique(),
+            { message: newNotification.trim() }
+        );
+        setCurrentNotification(newNotification.trim());
+    } catch (error) {
+        console.error('Error saving notification:', error);
+    } finally {
+        setIsSavingNotification(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -246,7 +291,7 @@ const OverviewTab: React.FC = () => {
                                    <i className="fas fa-clock mr-1"></i> {item.date}
                                </p>
                            </div>
-                           <button onClick={() => deleteSchedule(item.id)} title="Xóa lịch" className="text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100">
+                           <button type="button" onClick={() => deleteSchedule(item.id)} title="Xóa lịch" className="text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100">
                                <i className="fas fa-trash-alt text-xs"></i>
                            </button>
                        </div>
@@ -332,7 +377,7 @@ const OverviewTab: React.FC = () => {
                                     </span>
                                 </div>
                             </div>
-                            <button onClick={() => deleteTask(task.id)} title="Xóa nhiệm vụ" className="text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100">
+                            <button type="button" onClick={() => deleteTask(task.id)} title="Xóa nhiệm vụ" className="text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100">
                                 <i className="fas fa-times text-xs"></i>
                             </button>
                         </div>
@@ -343,6 +388,39 @@ const OverviewTab: React.FC = () => {
         </div>
 
       </div>
+
+      {/* WIDGET: THÔNG BÁO HỆ THỐNG */}
+      <div className="bg-white border-2 border-slate-200 rounded-sm overflow-hidden">
+          <div className="bg-red-900 px-4 py-3 border-b-2 border-yellow-500 flex items-center gap-2">
+              <i className="fas fa-bullhorn text-yellow-400"></i>
+              <h3 className="font-black text-white text-[11px] uppercase tracking-wider">Thông báo hệ thống</h3>
+          </div>
+          <div className="p-4 space-y-3">
+              <div>
+                  <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest mb-1">Đang hiển thị:</p>
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-sm">
+                      <p className="text-xs font-bold text-red-900 uppercase">{currentNotification || 'Chưa có thông báo'}</p>
+                  </div>
+              </div>
+              <form onSubmit={saveNotification} className="flex gap-2">
+                  <input
+                      type="text"
+                      value={newNotification}
+                      onChange={e => setNewNotification(e.target.value)}
+                      placeholder="Nhập nội dung thông báo mới..."
+                      className="flex-1 p-2.5 bg-slate-50 border border-slate-300 rounded-sm text-xs focus:border-red-900 outline-none font-bold"
+                  />
+                  <button
+                      type="submit"
+                      disabled={isSavingNotification}
+                      className="bg-red-900 text-white px-4 rounded-sm font-black text-[10px] uppercase tracking-widest hover:bg-red-800 transition-all disabled:opacity-50 whitespace-nowrap"
+                  >
+                      {isSavingNotification ? <i className="fas fa-spinner fa-spin"></i> : 'Cập nhật'}
+                  </button>
+              </form>
+          </div>
+      </div>
+
     </div>
   );
 };

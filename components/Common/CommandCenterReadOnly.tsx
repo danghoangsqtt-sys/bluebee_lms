@@ -28,21 +28,29 @@ const CommandCenterReadOnly: React.FC<DashboardWidgetProps> = ({ user, type }) =
                 Query.limit(20)
             ];
 
-            // Role-based filtering logic
-            if (user.role === 'teacher') {
-                queries.push(Query.equal('targetType', ['all', 'teacher']));
-                queries.push(Query.equal('targetId', ['', 'all', user.id]));
-            } else if (user.role === 'student') {
-                const targetTypes = ['all', 'student'];
-                const targetIds = ['', 'all', user.id];
-                
-                if (user.classId) {
-                    targetTypes.push('class');
-                    targetIds.push(user.classId);
+            if (type === 'schedule') {
+                // schedules collection uses class_id field (not targetType/targetId)
+                if (user.role === 'student' && user.classId) {
+                    queries.push(Query.equal('class_id', ['all', user.classId]));
                 }
-                
-                queries.push(Query.equal('targetType', targetTypes));
-                queries.push(Query.equal('targetId', targetIds));
+                // teachers and admins see all schedules
+            } else {
+                // tasks collection uses targetType/targetId
+                if (user.role === 'teacher') {
+                    queries.push(Query.equal('targetType', ['all', 'teacher']));
+                    queries.push(Query.equal('targetId', ['', 'all', user.id]));
+                } else if (user.role === 'student') {
+                    const targetTypes = ['all', 'student'];
+                    const targetIds = ['', 'all', user.id];
+
+                    if (user.classId) {
+                        targetTypes.push('class');
+                        targetIds.push(user.classId);
+                    }
+
+                    queries.push(Query.equal('targetType', targetTypes));
+                    queries.push(Query.equal('targetId', targetIds));
+                }
             }
 
             const response = await databases.listDocuments(
