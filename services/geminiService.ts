@@ -2,13 +2,13 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Question, QuestionType, KnowledgeDocument, AppSettings, UserProfile } from "../types";
 
 // --- CONFIGURATION ---
-const PRIMARY_MODEL = "gemini-2.5-flash"; 
-const FALLBACK_MODEL = "gemini-2.0-flash"; // Fix M-01: Model fallback thực sự
+const PRIMARY_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODEL = "gemini-2.0-flash";
+const FALLBACK_MODEL_2 = "gemini-1.5-flash"; // Third fallback for 429 rate limits
 const STORAGE_KEY_API = 'DTS_GEMINI_API_KEY';
 
-// Fix M-03: Giới hạn context hợp lý (≈ 800K tokens, tránh out-of-memory)
-const MAX_CONTEXT_CHARS = 600000; // ~150K tokens, để lại room cho prompt + output
-const MAX_HISTORY_LENGTH = 20;    // Giới hạn history để tránh context overflow
+const MAX_CONTEXT_CHARS = 1500000; // ~375K tokens — sufficient for full textbooks
+const MAX_HISTORY_LENGTH = 20;
 
 const DEFAULT_SETTINGS: AppSettings = {
   modelName: PRIMARY_MODEL, 
@@ -22,8 +22,12 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const getSettings = (): AppSettings => {
-  const saved = localStorage.getItem('app_settings');
-  return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+  try {
+    const saved = localStorage.getItem('app_settings');
+    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
 };
 
 /**
@@ -75,7 +79,7 @@ const generateWithFallback = async (
   params: any, 
   retryCount = 4
 ): Promise<{ response: GenerateContentResponse, usedModel: string }> => {
-  const modelsToTry = [params.model || PRIMARY_MODEL, FALLBACK_MODEL];
+  const modelsToTry = [params.model || PRIMARY_MODEL, FALLBACK_MODEL, FALLBACK_MODEL_2];
   
   for (const modelToUse of modelsToTry) {
     let attempt = 0;
@@ -111,7 +115,7 @@ const generateWithFallback = async (
           attempt++;
           if (attempt >= retryCount) break; // Hết retry → thử model tiếp theo
 
-          const delay = 500 * Math.pow(2, attempt); // Giảm mạnh thời gian chờ
+          const delay = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s, 16s
           console.warn(`[AI Retry] ${attempt}/${retryCount} - Chờ ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
           continue;
@@ -281,6 +285,7 @@ ${promptText}
           bloomLevel: { type: Type.STRING }
         },
         required: ["content", "type", "correctAnswer", "explanation", "category", "bloomLevel"],
+        // options is intentionally omitted from required — ESSAY questions have none
       },
     };
 

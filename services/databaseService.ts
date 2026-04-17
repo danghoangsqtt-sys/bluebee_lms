@@ -364,9 +364,7 @@ export const databaseService = {
   },
 
   async bulkInsertQuestions(questions: Question[], userId: string, role: string) {
-    for (const q of questions) {
-        await this.saveQuestion(q, userId, role);
-    }
+    await Promise.all(questions.map(q => this.saveQuestion(q, userId, role)));
   },
 
   // --- SỬA LỖI TẠI ĐÂY: Serverside Filtering cho Exams ---

@@ -24,6 +24,8 @@ const getApiKey = (): string | undefined => {
     return import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
 };
 
+const MAX_FILE_SIZE_MB = 50;
+
 export const extractDataFromPDF = async (fileOrUrl: File | string): Promise<{ text: string; metadata: PdfMetadata }> => {
   try {
     let file: File;
@@ -33,6 +35,10 @@ export const extractDataFromPDF = async (fileOrUrl: File | string): Promise<{ te
         file = new File([blob], "downloaded_file");
     } else {
         file = fileOrUrl;
+    }
+
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        throw new Error(`Tài liệu quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Giới hạn tối đa là ${MAX_FILE_SIZE_MB}MB.`);
     }
 
     const text = await parseDocument(file);

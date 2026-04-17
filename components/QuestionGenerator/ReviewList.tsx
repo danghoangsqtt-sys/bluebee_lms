@@ -24,19 +24,25 @@ const ReviewList: React.FC<ReviewListProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const existing = questions[index].previewUrl;
+    if (existing && existing.startsWith('blob:')) URL.revokeObjectURL(existing);
+
     const previewUrl = URL.createObjectURL(file);
-    const updatedQ = { 
-        ...questions[index], 
-        imageFile: file, 
-        previewUrl: previewUrl 
+    const updatedQ = {
+        ...questions[index],
+        imageFile: file,
+        previewUrl: previewUrl
     };
     onUpdateQuestion(index, updatedQ);
   };
 
   const handleRemoveImage = (index: number) => {
-    const updatedQ = { 
-        ...questions[index], 
-        imageFile: undefined, 
+    const existing = questions[index].previewUrl;
+    if (existing && existing.startsWith('blob:')) URL.revokeObjectURL(existing);
+
+    const updatedQ = {
+        ...questions[index],
+        imageFile: undefined,
         previewUrl: undefined,
         image: undefined
     };
