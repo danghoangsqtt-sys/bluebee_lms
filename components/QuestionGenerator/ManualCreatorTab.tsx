@@ -60,11 +60,11 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
   const [folderOpen, setFolderOpen] = useState(false);
   const folderRef = useRef<HTMLDivElement>(null);
 
-  // Chỉ lấy thư mục từ Ngân hàng đề thi
-  const mergedExamFolders = React.useMemo(() => {
-    const set = new Set(['Mặc định', ...examFolders]);
+  // Chỉ lấy thư mục từ Kho câu hỏi
+  const questionFolders = React.useMemo(() => {
+    const set = new Set(['Mặc định', ...availableFolders]);
     return Array.from(set).sort();
-  }, [examFolders]);
+  }, [availableFolders]);
 
   // Click outside to close folder dropdown
   useEffect(() => {
@@ -203,7 +203,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
             {/* ── 1. THƯ MỤC — Custom Dropdown ── */}
             <section>
               <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">
-                <i className="fas fa-folder-open text-yellow-500 mr-1.5"></i>Thư mục đề thi
+                <i className="fas fa-folder-open text-yellow-500 mr-1.5"></i>Thư mục câu hỏi
               </label>
               <div ref={folderRef} className="relative">
                 <button type="button" onClick={() => setFolderOpen(v => !v)}
@@ -216,7 +216,7 @@ const ManualCreatorTab: React.FC<ManualCreatorTabProps> = ({
                 </button>
                 {folderOpen && (
                   <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-300 rounded-sm shadow-xl max-h-52 overflow-y-auto custom-scrollbar">
-                    {mergedExamFolders.map((f, i) => (
+                    {questionFolders.map((f, i) => (
                       <button type="button" key={i}
                         onClick={() => { setManualQ({ ...manualQ, folder: f }); setFolderOpen(false); }}
                         className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors
